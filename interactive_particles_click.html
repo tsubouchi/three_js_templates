@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three.js パーティクルエフェクト</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      touch-action: none;
+    }
+    canvas {
+      display: block;
+    }
+    .info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      background-color: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="info">画面をタップ/クリックすると新しいパーティクルが発生します</div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // シーン、カメラ、レンダラーのセットアップ
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x111122);
+
+    // 縦長の画面比率を保つためのカメラの設定
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 20;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    // コントロールの追加
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.enableRotate = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+
+    // パーティクルシステムの設定
+    const particleCount = 5000;
+    const particlesGeometry = new THREE.BufferGeometry();
+    
+    // パーティクルの初期位置をランダムな球体状に配置
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const velocities = []; // 各パーティクルの速度ベクトル
+
+    // テクスチャローダー
+    const textureLoader = new THREE.TextureLoader();
+    const particleTexture = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/sprites/circle.png');
+
+    // パーティクルの初期化
+    for (let i = 0; i < particleCount; i++) {
+      const i3 = i * 3;
+      
+      // 球体状の初期配置
+      const radius = Math.random() * 10;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      
+      positions[i3] = radius * Math.sin(phi) * Math.cos(theta);
+      positions[i3 + 1] = radius * Math.sin(phi) * Math.sin(theta) * 1.6; // 縦長に調整
+      positions[i3 + 2] = radius * Math.cos(phi);
+      
+      // 色を設定
+      colors[i3] = Math.random();
+      colors[i3 + 1] = Math.random();
+      colors[i3 + 2] = Math.random();
+      
+      // サイズをランダムに設定
+      sizes[i] = Math.random() * 0.5 + 0.1;
+      
+      // 速度を設定
+      velocities.push({
+        x: (Math.random() - 0.5) * 0.05,
+        y: (Math.random() - 0.5) * 0.05,
+        z: (Math.random() - 0.5) * 0.05
+      });
+    }
+
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    // パーティクルマテリアル
+    const particlesMaterial = new THREE.PointsMaterial({
+      size: 0.2,
+      sizeAttenuation: true,
+      transparent: true,
+      alphaMap: particleTexture,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true
+    });
+
+    // パーティクルシステムの作成
+    const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+    scene.add(particles);
+
+    // マウス座標の追跡
+    const mouse = new THREE.Vector2();
+    window.addEventListener('mousemove', (event) => {
+      // -1 から 1 の範囲に正規化
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    });
+
+    // クリック/タップ時に新しいパーティクルを追加
+    let clickPoint = new THREE.Vector3();
+    window.addEventListener('click', (event) => {
+      // クリック位置をワールド座標に変換
+      const vector = new THREE.Vector3(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -(event.clientY / window.innerHeight) * 2 + 1,
+        0.5
+      );
+      vector.unproject(camera);
+      const dir = vector.sub(camera.position).normalize();
+      const distance = -camera.position.z / dir.z;
+      clickPoint = camera.position.clone().add(dir.multiplyScalar(distance));
+      
+      // 爆発をシミュレート
+      createExplosion(clickPoint);
+    });
+
+    // タッチデバイス対応
+    window.addEventListener('touchstart', (event) => {
+      if (event.touches.length > 0) {
+        const touch = event.touches[0];
+        const vector = new THREE.Vector3(
+          (touch.clientX / window.innerWidth) * 2 - 1,
+          -(touch.clientY / window.innerHeight) * 2 + 1,
+          0.5
+        );
+        vector.unproject(camera);
+        const dir = vector.sub(camera.position).normalize();
+        const distance = -camera.position.z / dir.z;
+        clickPoint = camera.position.clone().add(dir.multiplyScalar(distance));
+        
+        createExplosion(clickPoint);
+      }
+    });
+
+    // 爆発効果の生成
+    function createExplosion(position) {
+      const explosionParticleCount = 300;
+      const explosionGeometry = new THREE.BufferGeometry();
+      
+      const explosionPositions = new Float32Array(explosionParticleCount * 3);
+      const explosionColors = new Float32Array(explosionParticleCount * 3);
+      const explosionSizes = new Float32Array(explosionParticleCount);
+      
+      for (let i = 0; i < explosionParticleCount; i++) {
+        const i3 = i * 3;
+        
+        // 爆発の位置
+        explosionPositions[i3] = position.x;
+        explosionPositions[i3 + 1] = position.y;
+        explosionPositions[i3 + 2] = position.z;
+        
+        // カラフルな色
+        explosionColors[i3] = Math.random();
+        explosionColors[i3 + 1] = Math.random();
+        explosionColors[i3 + 2] = Math.random();
+        
+        // サイズ
+        explosionSizes[i] = Math.random() * 0.8 + 0.5;
+      }
+      
+      explosionGeometry.setAttribute('position', new THREE.BufferAttribute(explosionPositions, 3));
+      explosionGeometry.setAttribute('color', new THREE.BufferAttribute(explosionColors, 3));
+      explosionGeometry.setAttribute('size', new THREE.BufferAttribute(explosionSizes, 1));
+      
+      const explosionMaterial = new THREE.PointsMaterial({
+        size: 0.4,
+        sizeAttenuation: true,
+        transparent: true,
+        alphaMap: particleTexture,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexColors: true
+      });
+      
+      const explosion = new THREE.Points(explosionGeometry, explosionMaterial);
+      scene.add(explosion);
+      
+      // 爆発の速度をランダムに設定
+      const explosionVelocities = [];
+      for (let i = 0; i < explosionParticleCount; i++) {
+        explosionVelocities.push({
+          x: (Math.random() - 0.5) * 0.3,
+          y: (Math.random() - 0.5) * 0.3,
+          z: (Math.random() - 0.5) * 0.3
+        });
+      }
+      
+      // 爆発のアニメーション
+      let explosionLife = 60; // フレーム数
+      
+      function updateExplosion() {
+        if (explosionLife <= 0) {
+          scene.remove(explosion);
+          explosion.geometry.dispose();
+          explosion.material.dispose();
+          return;
+        }
+        
+        const positions = explosion.geometry.attributes.position.array;
+        
+        for (let i = 0; i < explosionParticleCount; i++) {
+          const i3 = i * 3;
+          
+          positions[i3] += explosionVelocities[i].x;
+          positions[i3 + 1] += explosionVelocities[i].y;
+          positions[i3 + 2] += explosionVelocities[i].z;
+        }
+        
+        explosion.geometry.attributes.position.needsUpdate = true;
+        
+        // 爆発のライフサイクルを減少
+        explosionLife--;
+        
+        // 徐々に透明にする
+        explosion.material.opacity = explosionLife / 60;
+        
+        requestAnimationFrame(updateExplosion);
+      }
+      
+      updateExplosion();
+    }
+
+    // アトラクター設定（パーティクルがカーブするポイント）
+    const attractors = [
+      { position: new THREE.Vector3(0, 5, 0), power: 0.01 },
+      { position: new THREE.Vector3(0, -5, 0), power: 0.008 }
+    ];
+
+    // アニメーションループ
+    const clock = new THREE.Clock();
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const elapsedTime = clock.getElapsedTime();
+      
+      // パーティクルの更新
+      const positions = particles.geometry.attributes.position.array;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        
+        // パーティクルの現在位置
+        const x = positions[i3];
+        const y = positions[i3 + 1];
+        const z = positions[i3 + 2];
+        
+        // 各アトラクターからの引力を計算
+        for (const attractor of attractors) {
+          const distance = Math.sqrt(
+            Math.pow(x - attractor.position.x, 2) +
+            Math.pow(y - attractor.position.y, 2) +
+            Math.pow(z - attractor.position.z, 2)
+          );
+          
+          // 一定距離以上離れたパーティクルに影響
+          if (distance > 2) {
+            // 引力方向の計算
+            const dirX = attractor.position.x - x;
+            const dirY = attractor.position.y - y;
+            const dirZ = attractor.position.z - z;
+            
+            // 正規化して力を加える
+            const len = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+            velocities[i].x += dirX / len * attractor.power;
+            velocities[i].y += dirY / len * attractor.power;
+            velocities[i].z += dirZ / len * attractor.power;
+          }
+        }
+        
+        // マウスによる引力を追加
+        const mouseProjected = new THREE.Vector3(mouse.x * 10, mouse.y * 10, 0);
+        const mouseDistance = Math.sqrt(
+          Math.pow(x - mouseProjected.x, 2) +
+          Math.pow(y - mouseProjected.y, 2) +
+          Math.pow(z - mouseProjected.z, 2)
+        );
+        
+        if (mouseDistance < 10) {
+          const dirX = mouseProjected.x - x;
+          const dirY = mouseProjected.y - y;
+          const dirZ = mouseProjected.z - z;
+          
+          const len = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+          velocities[i].x += dirX / len * 0.01;
+          velocities[i].y += dirY / len * 0.01;
+          velocities[i].z += dirZ / len * 0.01;
+        }
+        
+        // 減衰を追加して安定させる
+        velocities[i].x *= 0.99;
+        velocities[i].y *= 0.99;
+        velocities[i].z *= 0.99;
+        
+        // 位置更新
+        positions[i3] += velocities[i].x;
+        positions[i3 + 1] += velocities[i].y;
+        positions[i3 + 2] += velocities[i].z;
+        
+        // 一定範囲を超えたら反対側から再登場
+        const bound = 15;
+        if (positions[i3] < -bound) positions[i3] = bound;
+        if (positions[i3] > bound) positions[i3] = -bound;
+        if (positions[i3 + 1] < -bound * 1.6) positions[i3 + 1] = bound * 1.6;
+        if (positions[i3 + 1] > bound * 1.6) positions[i3 + 1] = -bound * 1.6;
+        if (positions[i3 + 2] < -bound) positions[i3 + 2] = bound;
+        if (positions[i3 + 2] > bound) positions[i3 + 2] = -bound;
+      }
+      
+      // サイズをアニメーション
+      const sizes = particles.geometry.attributes.size.array;
+      for (let i = 0; i < particleCount; i++) {
+        sizes[i] = Math.abs(Math.sin(elapsedTime + i * 0.1)) * 0.5 + 0.1;
+      }
+      
+      // アトラクターの位置を時間とともに動かす
+      attractors[0].position.x = Math.sin(elapsedTime * 0.5) * 5;
+      attractors[0].position.z = Math.cos(elapsedTime * 0.5) * 5;
+      attractors[1].position.x = Math.sin(elapsedTime * 0.5 + Math.PI) * 5;
+      attractors[1].position.z = Math.cos(elapsedTime * 0.5 + Math.PI) * 5;
+      
+      // 更新フラグを設定
+      particles.geometry.attributes.position.needsUpdate = true;
+      particles.geometry.attributes.size.needsUpdate = true;
+      
+      // コントロールを更新
+      controls.update();
+      
+      // レンダリング
+      renderer.render(scene, camera);
+    }
+
+    // リサイズハンドラー
+    window.addEventListener('resize', () => {
+      // カメラのアスペクト比を更新
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      
+      // レンダラーのサイズを更新
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    // アニメーションスタート
+    animate();
+  </script>
+</body>
+</html>

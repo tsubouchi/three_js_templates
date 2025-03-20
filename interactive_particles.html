@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three.js インタラクティブパーティクルエフェクト</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      touch-action: none;
+      background-color: #000;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    .container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .canvas-container {
+      width: calc(100vh * 9/16);
+      height: 100vh;
+      max-width: 100vw;
+      position: relative;
+    }
+    @media (max-aspect-ratio: 9/16) {
+      .canvas-container {
+        width: 100vw;
+        height: calc(100vw * 16/9);
+        max-height: 100vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="canvas-container" id="canvas-container"></div>
+  </div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // シーン、カメラ、レンダラーのセットアップ
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    // 縦長の画面比率（9:16）に最適化
+    const container = document.getElementById('canvas-container');
+    const aspect = 9 / 16;
+    let canvasWidth, canvasHeight;
+    
+    function updateCanvasSize() {
+      if (window.innerWidth / window.innerHeight > aspect) {
+        // 画面が横長の場合
+        canvasHeight = window.innerHeight;
+        canvasWidth = canvasHeight * aspect;
+      } else {
+        // 画面が縦長の場合
+        canvasWidth = window.innerWidth;
+        canvasHeight = canvasWidth / aspect;
+      }
+      container.style.width = `${canvasWidth}px`;
+      container.style.height = `${canvasHeight}px`;
+    }
+    
+    updateCanvasSize();
+
+    // パースペクティブカメラの設定
+    const camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+    camera.position.z = 20;
+
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      powerPreference: "high-performance",
+      alpha: true
+    });
+    renderer.setSize(canvasWidth, canvasHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    // ポストプロセッシングの設定
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    // ブルームエフェクト
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(canvasWidth, canvasHeight),
+      1.5,  // 強度
+      0.4,  // 半径
+      0.85  // しきい値
+    );
+    composer.addPass(bloomPass);
+
+    // コントロールの追加
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = false;
+    controls.enableRotate = true;
+    controls.enableZoom = true;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 0.5;
+    
+    // パーティクルシステムの設定
+    const particleCount = 10000;
+    const particlesGeometry = new THREE.BufferGeometry();
+    
+    // パーティクルの初期位置
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const sizes = new Float32Array(particleCount);
+    const velocities = [];
+    const lifeTimes = new Float32Array(particleCount);
+    const maxLifeTime = 500;
+    
+    // テクスチャローダー
+    const textureLoader = new THREE.TextureLoader();
+    const particleTexture = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/sprites/spark1.png');
+    
+    // パーティクルタイプ
+    const particleTypes = [
+      { name: "spiral", chance: 0.3 },
+      { name: "fountain", chance: 0.2 },
+      { name: "explosion", chance: 0.15 },
+      { name: "vortex", chance: 0.2 },
+      { name: "random", chance: 0.15 }
+    ];
+    
+    // パーティクルの初期化
+    function initParticle(index, type = null, position = null) {
+      const i3 = index * 3;
+      
+      // パーティクルタイプが指定されていない場合はランダムに選択
+      if (!type) {
+        const rand = Math.random();
+        let cumulativeChance = 0;
+        
+        for (const particleType of particleTypes) {
+          cumulativeChance += particleType.chance;
+          if (rand < cumulativeChance) {
+            type = particleType.name;
+            break;
+          }
+        }
+      }
+      
+      // 位置と速度をタイプに応じて初期化
+      switch (type) {
+        case "spiral":
+          // 螺旋状に配置
+          const radius = Math.random() * 10 + 5;
+          const angle = Math.random() * Math.PI * 2;
+          const height = (Math.random() - 0.5) * 20;
+          
+          positions[i3] = Math.cos(angle) * radius;
+          positions[i3 + 1] = height;
+          positions[i3 + 2] = Math.sin(angle) * radius;
+          
+          velocities[index] = {
+            x: -Math.sin(angle) * 0.03,
+            y: (Math.random() - 0.5) * 0.02,
+            z: Math.cos(angle) * 0.03
+          };
+          break;
+          
+        case "fountain":
+          // 噴水のように下から上へ
+          positions[i3] = (Math.random() - 0.5) * 5;
+          positions[i3 + 1] = -15;
+          positions[i3 + 2] = (Math.random() - 0.5) * 5;
+          
+          velocities[index] = {
+            x: (Math.random() - 0.5) * 0.1,
+            y: Math.random() * 0.2 + 0.1,
+            z: (Math.random() - 0.5) * 0.1
+          };
+          break;
+          
+        case "explosion":
+          // 爆発のように中心から放射状に
+          if (position) {
+            positions[i3] = position.x;
+            positions[i3 + 1] = position.y;
+            positions[i3 + 2] = position.z;
+          } else {
+            positions[i3] = (Math.random() - 0.5) * 4;
+            positions[i3 + 1] = (Math.random() - 0.5) * 4;
+            positions[i3 + 2] = (Math.random() - 0.5) * 4;
+          }
+          
+          // 放射状の速度
+          const direction = new THREE.Vector3(
+            positions[i3],
+            positions[i3 + 1],
+            positions[i3 + 2]
+          ).normalize();
+          
+          const speed = Math.random() * 0.1 + 0.05;
+          velocities[index] = {
+            x: direction.x * speed,
+            y: direction.y * speed,
+            z: direction.z * speed
+          };
+          break;
+          
+        case "vortex":
+          // 渦のように
+          const vRadius = Math.random() * 15 + 2;
+          const vAngle = Math.random() * Math.PI * 2;
+          const vHeight = (Math.random() - 0.5) * 30;
+          
+          positions[i3] = Math.cos(vAngle) * vRadius;
+          positions[i3 + 1] = vHeight;
+          positions[i3 + 2] = Math.sin(vAngle) * vRadius;
+          
+          velocities[index] = {
+            x: Math.cos(vAngle + Math.PI/2) * 0.05,
+            y: (Math.random() - 0.5) * 0.01,
+            z: Math.sin(vAngle + Math.PI/2) * 0.05
+          };
+          break;
+          
+        case "random":
+        default:
+          // ランダムな位置
+          positions[i3] = (Math.random() - 0.5) * 40;
+          positions[i3 + 1] = (Math.random() - 0.5) * 70; // 縦長に合わせて広げる
+          positions[i3 + 2] = (Math.random() - 0.5) * 40;
+          
+          velocities[index] = {
+            x: (Math.random() - 0.5) * 0.05,
+            y: (Math.random() - 0.5) * 0.05,
+            z: (Math.random() - 0.5) * 0.05
+          };
+          break;
+      }
+      
+      // 色をHSLでグラデーションにする
+      const hue = Math.random();
+      const saturation = 0.8;
+      const lightness = 0.6;
+      
+      // HSLからRGBに変換
+      const color = new THREE.Color().setHSL(hue, saturation, lightness);
+      colors[i3] = color.r;
+      colors[i3 + 1] = color.g;
+      colors[i3 + 2] = color.b;
+      
+      // サイズをランダムに設定
+      sizes[index] = Math.random() * 0.8 + 0.2;
+      
+      // ライフタイムをランダムに設定
+      lifeTimes[index] = Math.random() * maxLifeTime;
+    }
+    
+    // パーティクルの初期化処理
+    for (let i = 0; i < particleCount; i++) {
+      initParticle(i);
+    }
+    
+    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    particlesGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+    // パーティクルマテリアル
+    const particlesMaterial = new THREE.PointsMaterial({
+      size: 0.3,
+      sizeAttenuation: true,
+      transparent: true,
+      map: particleTexture,
+      alphaMap: particleTexture,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true
+    });
+    
+    // パーティクルシステムの作成
+    const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+    scene.add(particles);
+    
+    // アトラクター設定
+    const attractors = [];
+    const attractorCount = 5;
+    
+    for (let i = 0; i < attractorCount; i++) {
+      attractors.push({
+        position: new THREE.Vector3(
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 30,
+          (Math.random() - 0.5) * 20
+        ),
+        power: Math.random() * 0.01 + 0.005,
+        radius: Math.random() * 5 + 2,
+        speed: Math.random() * 0.02 + 0.01,
+        type: Math.random() > 0.5 ? "attract" : "repel"
+      });
+    }
+    
+    // エミッターの設定
+    const emitters = [];
+    const emitterCount = 3;
+    
+    for (let i = 0; i < emitterCount; i++) {
+      emitters.push({
+        position: new THREE.Vector3(
+          (Math.random() - 0.5) * 20,
+          (Math.random() - 0.5) * 30,
+          (Math.random() - 0.5) * 20
+        ),
+        nextEmit: 0,
+        emitRate: Math.random() * 3 + 1,
+        lastEmitTime: 0,
+        color: new THREE.Color().setHSL(Math.random(), 0.8, 0.6),
+        type: particleTypes[Math.floor(Math.random() * particleTypes.length)].name
+      });
+    }
+    
+    // マウス位置の追跡
+    const mouse = new THREE.Vector2();
+    const mouseMoved = { value: false };
+    const mouseStrength = { value: 0.05 };
+    const mouseInfluence = { value: 10 };
+    
+    window.addEventListener('mousemove', (event) => {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      mouseMoved.value = true;
+      
+      // マウス移動時はカメラの自動回転を無効化
+      controls.autoRotate = false;
+    });
+    
+    // タッチイベント
+    window.addEventListener('touchmove', (event) => {
+      if (event.touches.length > 0) {
+        const touch = event.touches[0];
+        mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+        mouseMoved.value = true;
+        
+        // タッチ中はカメラの自動回転を無効化
+        controls.autoRotate = false;
+      }
+    });
+    
+    // マウス/タッチ解放時、自動回転を再開
+    window.addEventListener('mouseup', () => {
+      setTimeout(() => {
+        controls.autoRotate = true;
+      }, 3000);
+    });
+    
+    window.addEventListener('touchend', () => {
+      setTimeout(() => {
+        controls.autoRotate = true;
+      }, 3000);
+    });
+    
+    // クリック/タップでエフェクト生成
+    window.addEventListener('click', (event) => {
+      createInteractionEffect(event.clientX, event.clientY);
+    });
+    
+    window.addEventListener('touchstart', (event) => {
+      if (event.touches.length > 0) {
+        const touch = event.touches[0];
+        createInteractionEffect(touch.clientX, touch.clientY);
+      }
+    });
+    
+    // インタラクションエフェクト生成
+    function createInteractionEffect(clientX, clientY) {
+      // スクリーン座標を正規化
+      const x = (clientX / window.innerWidth) * 2 - 1;
+      const y = -(clientY / window.innerHeight) * 2 + 1;
+      
+      // レイキャスティング
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+      
+      // レイが向いている方向に仮想的な位置を設定
+      const position = new THREE.Vector3();
+      raycaster.ray.at(15, position); // カメラからの距離15の位置
+      
+      // 爆発エフェクト
+      const particlesToUpdate = Math.floor(Math.random() * 200) + 100;
+      
+      for (let i = 0; i < particlesToUpdate; i++) {
+        const index = Math.floor(Math.random() * particleCount);
+        initParticle(index, "explosion", position);
+      }
+      
+      // 一時的にマウスの影響力を強めます
+      const originalStrength = mouseStrength.value;
+      mouseStrength.value = 0.2;
+      setTimeout(() => {
+        mouseStrength.value = originalStrength;
+      }, 1000);
+    }
+    
+    // 特殊イベント用タイマー
+    let specialEventTimer = 0;
+    let nextSpecialEvent = Math.random() * 20 + 10; // 10-30秒ごとにイベント発生
+    
+    // 特殊イベント
+    function triggerSpecialEvent() {
+      const events = [
+        "bigExplosion",
+        "colorShift",
+        "vortexPull",
+        "fountainBurst",
+        "spiralFormation"
+      ];
+      
+      const selectedEvent = events[Math.floor(Math.random() * events.length)];
+      
+      switch(selectedEvent) {
+        case "bigExplosion":
+          // 中心での大きな爆発
+          const position = new THREE.Vector3(0, 0, 0);
+          const particlesToUpdate = Math.floor(Math.random() * 1000) + 500;
+          
+          for (let i = 0; i < particlesToUpdate; i++) {
+            const index = Math.floor(Math.random() * particleCount);
+            initParticle(index, "explosion", position);
+          }
+          break;
+          
+        case "colorShift":
+          // すべてのパーティクルの色を徐々に変化
+          const colors = particles.geometry.attributes.color.array;
+          const hueShift = Math.random();
+          
+          for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            const color = new THREE.Color(colors[i3], colors[i3 + 1], colors[i3 + 2]);
+            const hsl = {};
+            color.getHSL(hsl);
+            color.setHSL((hsl.h + hueShift) % 1, hsl.s, hsl.l);
+            
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
+          }
+          particles.geometry.attributes.color.needsUpdate = true;
+          break;
+          
+        case "vortexPull":
+          // すべてのパーティクルを一時的に強力な渦に引き込む
+          for (let i = 0; i < attractorCount; i++) {
+            const originalPower = attractors[i].power;
+            attractors[i].power = 0.03;
+            attractors[i].type = "attract";
+            
+            setTimeout(() => {
+              attractors[i].power = originalPower;
+            }, 3000);
+          }
+          break;
+          
+        case "fountainBurst":
+          // 底面からの大量噴出
+          const burstCount = Math.floor(Math.random() * 1000) + 500;
+          
+          for (let i = 0; i < burstCount; i++) {
+            const index = Math.floor(Math.random() * particleCount);
+            initParticle(index, "fountain");
+          }
+          break;
+          
+        case "spiralFormation":
+          // 螺旋形成
+          const spiralCount = Math.floor(Math.random() * 1000) + 500;
+          
+          for (let i = 0; i < spiralCount; i++) {
+            const index = Math.floor(Math.random() * particleCount);
+            initParticle(index, "spiral");
+          }
+          break;
+      }
+      
+      // 次のイベントタイミングをリセット
+      nextSpecialEvent = Math.random() * 20 + 10;
+      specialEventTimer = 0;
+    }
+    
+    // アニメーションループ
+    const clock = new THREE.Clock();
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      const elapsedTime = clock.getElapsedTime();
+      const deltaTime = clock.getDelta();
+      
+      // 特殊イベントタイマー
+      specialEventTimer += deltaTime;
+      if (specialEventTimer >= nextSpecialEvent) {
+        triggerSpecialEvent();
+      }
+      
+      // アトラクターを動かす
+      for (let i = 0; i < attractors.length; i++) {
+        const attractor = attractors[i];
+        
+        attractor.position.x = Math.sin(elapsedTime * attractor.speed + i) * attractor.radius;
+        attractor.position.z = Math.cos(elapsedTime * attractor.speed + i) * attractor.radius;
+        attractor.position.y = Math.sin(elapsedTime * attractor.speed * 0.7 + i) * attractor.radius * 1.6;
+        
+        // 一定確率でアトラクターの種類を変更
+        if (Math.random() < 0.003) {
+          attractor.type = attractor.type === "attract" ? "repel" : "attract";
+        }
+      }
+      
+      // エミッターの更新
+      for (let i = 0; i < emitters.length; i++) {
+        const emitter = emitters[i];
+        
+        // エミッターを動かす
+        emitter.position.x = Math.sin(elapsedTime * 0.2 + i * 2) * 12;
+        emitter.position.y = Math.sin(elapsedTime * 0.15 + i) * 20;
+        emitter.position.z = Math.cos(elapsedTime * 0.2 + i * 1.5) * 12;
+        
+        // 一定確率でエミッタータイプを変更
+        if (Math.random() < 0.01) {
+          emitter.type = particleTypes[Math.floor(Math.random() * particleTypes.length)].name;
+        }
+        
+        // パーティクルを放出
+        const timeSinceLastEmit = elapsedTime - emitter.lastEmitTime;
+        if (timeSinceLastEmit > 1 / emitter.emitRate) {
+          const particlesToUpdate = Math.floor(Math.random() * 20) + 10;
+          
+          for (let j = 0; j < particlesToUpdate; j++) {
+            const index = Math.floor(Math.random() * particleCount);
+            initParticle(index, emitter.type, emitter.position);
+          }
+          
+          emitter.lastEmitTime = elapsedTime;
+        }
+      }
+      
+      // マウス位置をワールド座標に変換
+      const mouseWorld = new THREE.Vector3(mouse.x, mouse.y, 0);
+      mouseWorld.unproject(camera);
+      const dir = mouseWorld.sub(camera.position).normalize();
+      const distance = 15;
+      const mousePosition = camera.position.clone().add(dir.multiplyScalar(distance));
+      
+      // パーティクルの更新
+      const positions = particles.geometry.attributes.position.array;
+      
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        
+        // ライフタイムを減少
+        lifeTimes[i] -= 1;
+        
+        // ライフタイムが0以下になったら再初期化
+        if (lifeTimes[i] <= 0) {
+          // ランダムなタイプで再初期化
+          const type = particleTypes[Math.floor(Math.random() * particleTypes.length)].name;
+          initParticle(i, type);
+          continue;
+        }
+        
+        // パーティクルの現在位置
+        const x = positions[i3];
+        const y = positions[i3 + 1];
+        const z = positions[i3 + 2];
+        
+        // 各アトラクターからの引力/斥力を計算
+        for (const attractor of attractors) {
+          const distance = Math.sqrt(
+            Math.pow(x - attractor.position.x, 2) +
+            Math.pow(y - attractor.position.y, 2) +
+            Math.pow(z - attractor.position.z, 2)
+          );
+          
+          // 一定距離内のパーティクルに影響
+          if (distance > 0.5 && distance < 20) {
+            // 力の方向を計算
+            const dirX = attractor.position.x - x;
+            const dirY = attractor.position.y - y;
+            const dirZ = attractor.position.z - z;
+            
+            // 正規化して力を加える
+            const len = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+            const power = attractor.type === "attract" ? attractor.power : -attractor.power;
+            
+            velocities[i].x += dirX / len * power * (1 / Math.max(distance * 0.2, 1));
+            velocities[i].y += dirY / len * power * (1 / Math.max(distance * 0.2, 1));
+            velocities[i].z += dirZ / len * power * (1 / Math.max(distance * 0.2, 1));
+          }
+        }
+        
+        // マウスによる引力/斥力（マウスが動いた場合のみ）
+        if (mouseMoved.value) {
+          const mouseDistance = Math.sqrt(
+            Math.pow(x - mousePosition.x, 2) +
+            Math.pow(y - mousePosition.y, 2) +
+            Math.pow(z - mousePosition.z, 2)
+          );
+          
+          if (mouseDistance < mouseInfluence.value) {
+            const dirX = mousePosition.x - x;
+            const dirY = mousePosition.y - y;
+            const dirZ = mousePosition.z - z;
+            
+            const len = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+            velocities[i].x += dirX / len * mouseStrength.value;
+            velocities[i].y += dirY / len * mouseStrength.value;
+            velocities[i].z += dirZ / len * mouseStrength.value;
+          }
+        }
+        
+        // 減衰を追加して安定させる
+        velocities[i].x *= 0.98;
+        velocities[i].y *= 0.98;
+        velocities[i].z *= 0.98;
+        
+        // うねるような動きを追加
+        velocities[i].x += Math.sin(elapsedTime * 0.5 + i * 0.01) * 0.001;
+        velocities[i].y += Math.cos(elapsedTime * 0.3 + i * 0.01) * 0.001;
+        velocities[i].z += Math.sin(elapsedTime * 0.4 + i * 0.01) * 0.001;
+        
+        // 位置更新
+        positions[i3] += velocities[i].x;
+        positions[i3 + 1] += velocities[i].y;
+        positions[i3 + 2] += velocities[i].z;
+        
+        // 一定範囲を超えたらワープさせる
+        const boundX = 25;
+        const boundY = 40; // 縦長比率のため高さを大きく
+        const boundZ = 25;
+        
+        if (positions[i3] < -boundX || positions[i3] > boundX ||
+            positions[i3 + 1] < -boundY || positions[i3 + 1] > boundY ||
+            positions[i3 + 2] < -boundZ || positions[i3 + 2] > boundZ) {
+          // 範囲外に出たパーティクルを再初期化
+          const type = particleTypes[Math.floor(Math.random() * particleTypes.length)].name;
+          initParticle(i, type);
+        }
+        
+        // ライフタイムに応じてサイズを変更
+        const lifeRatio = lifeTimes[i] / maxLifeTime;
+        sizes[i] = lifeRatio * 0.8 + 0.2; // サイズを徐々に小さくする
+      }
+      
+      // 更新フラグを設定
+      particles.geometry.attributes.position.needsUpdate = true;
+      particles.geometry.attributes.size.needsUpdate = true;
+      
+      // コントロールを更新
+      controls.update();
+      
+      // ポストプロセッシングを使用したレンダリング
+      composer.render();
+    }
+    
+    // リサイズハンドラー
+    window.addEventListener('resize', () => {
+      updateCanvasSize();
+      
+      // カメラのアスペクト比を更新
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
+      
+      // レンダラーのサイズを更新
+      renderer.setSize(canvasWidth, canvasHeight);
+      composer.setSize(canvasWidth, canvasHeight);
+      
+      // ブルームパスのサイズも更新
+      bloomPass.resolution.set(canvasWidth, canvasHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+    // アニメーションスタート
+    animate();
+  </script>
+</body>
+</html>

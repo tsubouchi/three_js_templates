@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Three.js 煙/雲パーティクルアニメーション</title>
+  <style>
+    body { 
+      margin: 0; 
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #000;
+    }
+    canvas { 
+      display: block;
+      aspect-ratio: 9/16;
+      height: 100vh;
+      max-height: 100vh;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      z-index: 100;
+      background: rgba(0,0,0,0.7);
+      padding: 15px;
+      border-radius: 8px;
+      color: white;
+      font-family: Arial, sans-serif;
+      transition: opacity 0.3s ease;
+    }
+    .control-row {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+    .control-row:last-child {
+      margin-bottom: 0;
+    }
+    label {
+      width: 80px;
+      display: inline-block;
+    }
+    #speedSlider {
+      width: 150px;
+      margin: 0 10px;
+      vertical-align: middle;
+    }
+    #colorPicker {
+      margin: 0 10px;
+      vertical-align: middle;
+    }
+    #toggleButton {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      z-index: 100;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background 0.3s ease;
+    }
+    #toggleButton:hover {
+      background: rgba(40,40,40,0.8);
+    }
+    .hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div class="control-row">
+      <label for="speedSlider">スピード:</label>
+      <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1">
+      <span id="speedValue">1.0</span>
+    </div>
+    <div class="control-row">
+      <label for="colorPicker">色:</label>
+      <input type="color" id="colorPicker" value="#ffffff">
+      <input type="text" id="colorHex" value="#ffffff" style="width: 70px; text-align: center;">
+    </div>
+  </div>
+  
+  <button id="toggleButton">⚙️</button>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.159.0/three.module.min.js",
+        "three/addons/": "https://unpkg.com/three@0.159.0/examples/jsm/"
+      }
+    }
+  </script>
+  
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Canvas サイズ設定（9:16の縦長比率を固定）
+    const aspectRatio = 9/16;
+    const height = window.innerHeight;
+    const width = height * aspectRatio;
+
+    // シーン、カメラ、レンダラーの設定
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    
+    const camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+    camera.position.z = 4;
+    
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+    
+    // OrbitControls の追加
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // パーティクル用の円形テクスチャを作成
+    function createCircleTexture() {
+      const canvas = document.createElement('canvas');
+      const size = 128;
+      canvas.width = size;
+      canvas.height = size;
+      
+      const context = canvas.getContext('2d');
+      const centerX = size / 2;
+      const centerY = size / 2;
+      const radius = size / 2;
+      
+      context.beginPath();
+      context.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
+      
+      // 放射状のグラデーションを作成
+      const gradient = context.createRadialGradient(
+        centerX, centerY, 0, centerX, centerY, radius
+      );
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+      gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.8)');
+      gradient.addColorStop(0.7, 'rgba(255, 255, 255, 0.3)');
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+      
+      context.fillStyle = gradient;
+      context.fill();
+      
+      const texture = new THREE.Texture(canvas);
+      texture.needsUpdate = true;
+      return texture;
+    }
+
+    // パーティクルシステムの作成
+    const particleCount = 9;  // 元のコードと同じ9つのノイズソース
+    const groups = [];
+    let particleColor = new THREE.Color(0xffffff); // デフォルトの色
+
+    function createSmokeCloud(index) {
+      const particlesPerCloud = 10000;
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particlesPerCloud * 3);
+      const sizes = new Float32Array(particlesPerCloud);
+      const opacities = new Float32Array(particlesPerCloud);
+      
+      for (let i = 0; i < particlesPerCloud; i++) {
+        // ノイズ関数の代わりにランダムな位置で初期化
+        const radius = 1.0;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        
+        // 極座標から直交座標へ変換
+        const x = radius * Math.sin(phi) * Math.cos(theta);
+        const y = radius * Math.sin(phi) * Math.sin(theta);
+        const z = radius * Math.cos(phi);
+        
+        positions[i * 3] = x;
+        positions[i * 3 + 1] = y;
+        positions[i * 3 + 2] = z;
+        
+        // パーティクルごとのサイズとオパシティをランダムに設定
+        sizes[i] = Math.random() * 0.05 + 0.01;
+        opacities[i] = Math.random() * 0.5 + 0.2;
+      }
+      
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      geometry.setAttribute('opacity', new THREE.BufferAttribute(opacities, 1));
+      
+      // シェーダーマテリアルの作成
+      const material = new THREE.ShaderMaterial({
+        uniforms: {
+          time: { value: 0.0 },
+          cloudIndex: { value: index },
+          color: { value: particleColor },
+          pointTexture: { value: createCircleTexture() }
+        },
+        vertexShader: `
+          attribute float size;
+          attribute float opacity;
+          uniform float time;
+          uniform float cloudIndex;
+          varying float vOpacity;
+          
+          // 3次元ノイズ関数を模倣
+          float noise(vec3 p) {
+            vec3 i = floor(p);
+            vec3 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            
+            float n = i.x + i.y * 157.0 + i.z * 113.0;
+            vec4 v = fract(sin(vec4(n, n + 1.0, n + 113.0, n + 157.0)) * 43758.5453123);
+            
+            float res = mix(mix(mix(v.x, v.y, f.x), mix(v.z, v.w, f.x), f.y), 
+                            mix(mix(v.x, v.y, f.x), mix(v.z, v.w, f.x), f.y) + 0.5, f.z);
+            return res;
+          }
+          
+          void main() {
+            vOpacity = opacity;
+            
+            // 時間とインデックスに基づいた動きを追加
+            float noiseFreq = 0.4;
+            float noiseAmp = 1.0;
+            float baseFreq = cloudIndex * 0.1 + time * 0.05;
+            
+            vec3 noisePos = position;
+            float noise1 = noise(vec3(noisePos.x * noiseFreq + baseFreq, 
+                                    noisePos.y * noiseFreq + baseFreq, 
+                                    noisePos.z * noiseFreq + time * 0.1));
+            float noise2 = noise(vec3(noisePos.y * noiseFreq + baseFreq, 
+                                    noisePos.z * noiseFreq + baseFreq, 
+                                    noisePos.x * noiseFreq + time * 0.1));
+            float noise3 = noise(vec3(noisePos.z * noiseFreq + baseFreq, 
+                                    noisePos.x * noiseFreq + baseFreq, 
+                                    noisePos.y * noiseFreq + time * 0.1));
+            
+            vec3 offset = vec3(noise1, noise2, noise3) * noiseAmp;
+            vec3 newPosition = position + offset;
+            
+            // 雲の中心位置をオフセット
+            vec3 centerOffset = vec3(
+              sin(time * 0.2 + cloudIndex) * 1.5,
+              cos(time * 0.3 + cloudIndex * 0.7) * 1.5,
+              sin(time * 0.4 + cloudIndex * 1.4) * 1.5
+            );
+            
+            vec4 mvPosition = modelViewMatrix * vec4(newPosition + centerOffset, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+            
+            // カメラからの距離に基づいてサイズを調整
+            gl_PointSize = size * (300.0 / -mvPosition.z);
+          }
+        `,
+        fragmentShader: `
+          varying float vOpacity;
+          uniform vec3 color;
+          uniform sampler2D pointTexture;
+          
+          void main() {
+            // 円形のテクスチャを使用してパーティクルを描画
+            vec4 texColor = texture2D(pointTexture, gl_PointCoord);
+            gl_FragColor = vec4(color, vOpacity * texColor.a);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      
+      const particles = new THREE.Points(geometry, material);
+      scene.add(particles);
+      
+      return { particles, material };
+    }
+    
+    // 煙/雲のパーティクルグループを作成
+    for (let i = 0; i < particleCount; i++) {
+      groups.push(createSmokeCloud(i));
+    }
+    
+    // UI コントロール
+    const speedSlider = document.getElementById('speedSlider');
+    const speedValue = document.getElementById('speedValue');
+    const colorPicker = document.getElementById('colorPicker');
+    const colorHex = document.getElementById('colorHex');
+    const controlsPanel = document.getElementById('controls');
+    const toggleButton = document.getElementById('toggleButton');
+    
+    let timeSpeed = parseFloat(speedSlider.value);
+    let controlsVisible = true;
+    
+    // トグルボタンのイベントリスナー
+    toggleButton.addEventListener('click', function() {
+      controlsVisible = !controlsVisible;
+      if (controlsVisible) {
+        controlsPanel.classList.remove('hidden');
+        toggleButton.textContent = '⚙️';
+      } else {
+        controlsPanel.classList.add('hidden');
+        toggleButton.textContent = '👁️';
+      }
+    });
+    
+    // スピーダー制御
+    speedSlider.addEventListener('input', function() {
+      timeSpeed = parseFloat(this.value);
+      speedValue.textContent = timeSpeed.toFixed(1);
+    });
+    
+    // カラーピッカーのイベントリスナー
+    colorPicker.addEventListener('input', function() {
+      const color = this.value;
+      colorHex.value = color;
+      updateParticleColor(color);
+    });
+    
+    // 16進数テキスト入力のイベントリスナー
+    colorHex.addEventListener('change', function() {
+      let color = this.value;
+      // #がない場合は追加
+      if (!color.startsWith('#')) {
+        color = '#' + color;
+        this.value = color;
+      }
+      // 有効な16進数かチェック
+      if (/^#[0-9A-F]{6}$/i.test(color)) {
+        colorPicker.value = color;
+        updateParticleColor(color);
+      } else {
+        // 無効な場合はカラーピッカーの値に戻す
+        this.value = colorPicker.value;
+      }
+    });
+    
+    // パーティクルの色を更新する関数
+    function updateParticleColor(hexColor) {
+      // THREE.Colorに変換
+      particleColor.set(hexColor);
+      
+      // 各グループのマテリアルカラーを更新
+      groups.forEach(group => {
+        group.material.uniforms.color.value = particleColor;
+      });
+    }
+    
+    // アニメーションループ
+    let time = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // スピード設定に基づいてタイムステップを調整
+      time += 0.005 * timeSpeed;
+      
+      // 各パーティクルグループのタイムユニフォームを更新
+      groups.forEach(group => {
+        group.material.uniforms.time.value = time;
+      });
+      
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    
+    // レスポンシブ対応（9:16の縦長比率を維持）
+    window.addEventListener('resize', () => {
+      const aspectRatio = 9/16;
+      const newHeight = window.innerHeight;
+      const newWidth = newHeight * aspectRatio;
+      
+      camera.aspect = aspectRatio;
+      camera.updateProjectionMatrix();
+      
+      renderer.setSize(newWidth, newHeight);
+    });
+    
+    // アニメーションスタート
+    animate();
+  </script>
+</body>
+</html>

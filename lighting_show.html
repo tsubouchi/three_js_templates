@@ -1,0 +1,2106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professional Concert Lighting Animation</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script>
+    // Main variables
+    let scene, camera, renderer;
+    let lightRig = [];
+    let beamLights = [];
+    let pencilBeams = []; // New array for pencil beams
+    let laserSystems = [];
+    let ledPanels = [];
+    let lightBars = [];
+    let blinders = [];
+    let clock = new THREE.Clock();
+    let timeOffset = 0;
+    
+    // Sequence timing and state
+    let currentSequence = 0;
+    let sequenceTime = 0;
+    let beatTime = 0;
+    const BPM = 128; // beats per minute
+    const beatDuration = 60 / BPM;
+    
+    // Color presets for different moments
+    const colorSchemes = [
+      { // Red and blue scheme
+        primary: 0xFF3333,
+        secondary: 0x0066FF,
+        accent: 0xFFFFFF
+      },
+      { // Purple and yellow scheme
+        primary: 0x9900FF,
+        secondary: 0xFFCC00,
+        accent: 0x00FFAA
+      },
+      { // Green and pink scheme
+        primary: 0x00FF66,
+        secondary: 0xFF0099,
+        accent: 0xFFFFFF
+      },
+      { // Full rainbow mode
+        primary: 0xFF0000,
+        secondary: 0x00FF00,
+        accent: 0x0000FF
+      }
+    ];
+    let currentColorScheme = 0;
+    
+    // Scene haze and atmosphere
+    let haze;
+    let hazeParticles = [];
+    
+    // Initialize the scene
+    function init() {
+      // Create scene
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+      scene.fog = new THREE.FogExp2(0x000000, 0.008); // Subtle haze
+      
+      // Create camera
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 5, 30);
+      camera.lookAt(0, 8, 0);
+      
+      // Create renderer with better quality settings
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance"
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.body.appendChild(renderer.domElement);
+      
+      // Minimal ambient light
+      const ambientLight = new THREE.AmbientLight(0x111111, 0.1);
+      scene.add(ambientLight);
+      
+      // Create haze particles for visible light beams
+      createHaze();
+      
+      // Create different lighting elements
+      createMainRigLights();
+      createBeamLights();
+      createPencilBeams(); // Add ultra-thin pencil beams
+      createLaserSystems();
+      createLEDPanels();
+      createLightBars();
+      createBlinders();
+      
+      // Add stage floor (dark, nearly invisible)
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(100, 60),
+        new THREE.MeshStandardMaterial({ 
+          color: 0x0A0A0A, 
+          roughness: 0.8, 
+          metalness: 0.2,
+          transparent: true,
+          opacity: 0.4
+        })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -0.5;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      
+      // Add event listener for window resize
+      window.addEventListener('resize', onWindowResize);
+      
+      // Start animation loop
+      animate();
+    }
+    
+    // Create atmospheric haze for visible light beams
+    function createHaze() {
+      // Create a subtle haze particle system for visible light beams
+      const particleCount = 5000;
+      const hazeGeometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(particleCount * 3);
+      
+      // Distribute particles in a large volume
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        positions[i3] = (Math.random() - 0.5) * 60; // x
+        positions[i3 + 1] = Math.random() * 30; // y
+        positions[i3 + 2] = (Math.random() - 0.5) * 40; // z
+      }
+      
+      hazeGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      
+      // Barely visible particles
+      const hazeMaterial = new THREE.PointsMaterial({
+        color: 0xFFFFFF,
+        size: 0.1,
+        transparent: true,
+        opacity: 0.2,
+        depthWrite: false
+      });
+      
+      haze = new THREE.Points(hazeGeometry, hazeMaterial);
+      scene.add(haze);
+    }
+    
+    // Create main lighting rig (moving heads)
+    function createMainRigLights() {
+      // Create main lighting rig with 12 moving head lights
+      // Arranged in a truss pattern overhead
+      
+      // Create horizontal truss positions
+      const trussPositions = [
+        { x: -15, y: 20, z: -5 },
+        { x: 0, y: 20, z: -5 },
+        { x: 15, y: 20, z: -5 },
+        { x: -15, y: 20, z: 5 },
+        { x: 0, y: 20, z: 5 },
+        { x: 15, y: 20, z: 5 }
+      ];
+      
+      // For each position, create a powerful moving head light
+      trussPositions.forEach((pos, index) => {
+        // Create primary spot light
+        const headLight = new THREE.SpotLight(0xFFFFFF, 8, 100, Math.PI / 10, 0.2, 2);
+        headLight.position.set(pos.x, pos.y, pos.z);
+        
+        // Initial position pointing down
+        const targetY = -5;
+        const targetX = pos.x + (Math.random() - 0.5) * 10;
+        const targetZ = pos.z + (Math.random() - 0.5) * 10;
+        
+        headLight.target.position.set(targetX, targetY, targetZ);
+        
+        // Configure shadows
+        headLight.castShadow = true;
+        headLight.shadow.mapSize.width = 1024;
+        headLight.shadow.mapSize.height = 1024;
+        headLight.shadow.camera.near = 1;
+        headLight.shadow.camera.far = 100;
+        
+        // Add to scene
+        scene.add(headLight);
+        scene.add(headLight.target);
+        
+        // Store with movement parameters
+        lightRig.push({
+          light: headLight,
+          basePosition: new THREE.Vector3(pos.x, pos.y, pos.z),
+          baseTarget: new THREE.Vector3(targetX, targetY, targetZ),
+          tiltPhase: index * (Math.PI / 3),
+          panPhase: index * (Math.PI / 6),
+          tiltSpeed: 0.2 + Math.random() * 0.2,
+          panSpeed: 0.15 + Math.random() * 0.15,
+          intensity: 8
+        });
+      });
+    }
+    
+    // Create narrow beam lights
+    function createBeamLights() {
+      // Create 8 beam lights positioned at stage sides
+      const beamPositions = [
+        // Left side
+        { x: -18, y: 3, z: -8 },
+        { x: -18, y: 3, z: -4 },
+        { x: -18, y: 3, z: 0 },
+        { x: -18, y: 3, z: 4 },
+        // Right side
+        { x: 18, y: 3, z: -8 },
+        { x: 18, y: 3, z: -4 },
+        { x: 18, y: 3, z: 0 },
+        { x: 18, y: 3, z: 4 }
+      ];
+      
+      beamPositions.forEach((pos, index) => {
+        // Very narrow angle for beam effect
+        const beamLight = new THREE.SpotLight(0xFFFFFF, 10, 100, Math.PI / 60, 0.1, 2);
+        beamLight.position.set(pos.x, pos.y, pos.z);
+        
+        // Target initially toward center
+        const targetX = 0;
+        const targetY = 10;
+        const targetZ = -5;
+        beamLight.target.position.set(targetX, targetY, targetZ);
+        
+        // No shadows for performance
+        beamLight.castShadow = false;
+        
+        // Add to scene
+        scene.add(beamLight);
+        scene.add(beamLight.target);
+        
+        // Store with beam-specific parameters
+        beamLights.push({
+          light: beamLight,
+          basePosition: new THREE.Vector3(pos.x, pos.y, pos.z),
+          side: pos.x < 0 ? -1 : 1, // left or right side
+          index: index % 4,
+          phase: index * (Math.PI / 4),
+          active: true
+        });
+      });
+    }
+    
+    // Create ultra-thin pencil beams
+    function createPencilBeams() {
+      // Create 16 pencil beams in a grid on ceiling
+      const gridSize = 4; // 4x4 grid
+      const gridSpacing = 8; // spacing between beams
+      
+      for (let x = 0; x < gridSize; x++) {
+        for (let z = 0; z < gridSize; z++) {
+          // Ultra-narrow angle for pencil beam effect
+          const pencilBeam = new THREE.SpotLight(0xFFFFFF, 15, 100, Math.PI / 120, 0.01, 2);
+          
+          // Position in grid pattern on ceiling
+          const posX = (x * gridSpacing) - (gridSpacing * (gridSize - 1) / 2);
+          const posY = 19; // Ceiling level
+          const posZ = (z * gridSpacing) - (gridSpacing * (gridSize - 1) / 2);
+          
+          pencilBeam.position.set(posX, posY, posZ);
+          
+          // Initial target directly below
+          pencilBeam.target.position.set(posX, 0, posZ);
+          
+          // No shadows for performance with many lights
+          pencilBeam.castShadow = false;
+          
+          // Add to scene
+          scene.add(pencilBeam);
+          scene.add(pencilBeam.target);
+          
+          // Store with parameters
+          pencilBeams.push({
+            beam: pencilBeam,
+            basePosition: new THREE.Vector3(posX, posY, posZ),
+            index: x + z * gridSize,
+            gridX: x,
+            gridZ: z,
+            phase: (x / gridSize) + (z / gridSize) * 1.5,
+            active: true
+          });
+        }
+      }
+    }
+    
+    // Create laser systems
+    function createLaserSystems() {
+      // Create 16 laser projectors positioned around the space in a more immersive layout
+      const laserPositions = [
+        // Top ring
+        { x: -20, y: 18, z: -10 },
+        { x: -10, y: 18, z: -15 },
+        { x: 0, y: 18, z: -20 },
+        { x: 10, y: 18, z: -15 },
+        { x: 20, y: 18, z: -10 },
+        // Side positions
+        { x: -22, y: 15, z: 0 },
+        { x: -22, y: 10, z: 5 },
+        { x: -22, y: 5, z: 10 },
+        { x: 22, y: 15, z: 0 },
+        { x: 22, y: 10, z: 5 },
+        { x: 22, y: 5, z: 10 },
+        // Lower positions
+        { x: -15, y: 3, z: 15 },
+        { x: -5, y: 3, z: 18 },
+        { x: 5, y: 3, z: 18 },
+        { x: 15, y: 3, z: 15 },
+        // Center top
+        { x: 0, y: 20, z: 0 }
+      ];
+      
+      // For each position, create multiple ultra-thin laser beams
+      laserPositions.forEach((pos, systemIndex) => {
+        const systemLasers = [];
+        
+        // Each projector has 3-7 beams depending on position
+        const beamCount = systemIndex === 15 ? 12 : 3 + Math.floor(Math.random() * 5);
+        
+        for (let i = 0; i < beamCount; i++) {
+          // Ultra-narrow beam for laser effect - much narrower than before
+          const laserBeam = new THREE.SpotLight(0x00FF00, 12, 300, Math.PI / 500, 0, 2);
+          
+          // Position slightly offset from main position for multi-beam effect
+          const offsetX = pos.x + (Math.random() - 0.5) * 0.2;
+          const offsetY = pos.y + (Math.random() - 0.5) * 0.2;
+          const offsetZ = pos.z + (Math.random() - 0.5) * 0.2;
+          
+          laserBeam.position.set(offsetX, offsetY, offsetZ);
+          
+          // Initial target
+          const targetX = (Math.random() - 0.5) * 50;
+          const targetY = (Math.random() - 0.5) * 20 + 10;
+          const targetZ = (Math.random() - 0.5) * 50;
+          
+          laserBeam.target.position.set(targetX, targetY, targetZ);
+          
+          // No shadows for lasers - needs to be performant with many lights
+          laserBeam.castShadow = false;
+          
+          // Add to scene
+          scene.add(laserBeam);
+          scene.add(laserBeam.target);
+          
+          // Store laser beam with more specific movement parameters
+          systemLasers.push({
+            beam: laserBeam,
+            origin: new THREE.Vector3(offsetX, offsetY, offsetZ),
+            phase: i * (Math.PI / beamCount) + systemIndex * (Math.PI / 8),
+            speedFactor: 0.5 + Math.random() * 2,
+            mode: Math.floor(Math.random() * 5), // Different movement patterns
+            thickness: Math.random() < 0.7 ? 'ultra-thin' : 'thin' // Vary thickness slightly
+          });
+        }
+        
+        // Add entire system to lasers array
+        laserSystems.push({
+          position: pos,
+          beams: systemLasers,
+          active: true,
+          color: 0x00FF00, // Default color, will change in sequences
+          systemIndex: systemIndex
+        });
+      });
+    }
+    
+    // Create LED panels
+    function createLEDPanels() {
+      // Create a wall of LED panels for backdrop
+      const panelSize = 2;
+      const panelGap = 0.2;
+      const wallWidth = 7; // panels across
+      const wallHeight = 4; // panels high
+      
+      for (let x = 0; x < wallWidth; x++) {
+        for (let y = 0; y < wallHeight; y++) {
+          // Panel physical geometry (thin box)
+          const panelGeometry = new THREE.BoxGeometry(panelSize, panelSize, 0.2);
+          
+          // Emissive material for glow effect
+          const panelMaterial = new THREE.MeshStandardMaterial({
+            color: 0x333333,
+            emissive: 0x000000, // Start dark
+            emissiveIntensity: 1,
+            roughness: 0.2
+          });
+          
+          const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+          
+          // Position in wall grid
+          const posX = (x - (wallWidth - 1) / 2) * (panelSize + panelGap);
+          const posY = (y + 0.5) * (panelSize + panelGap) + 5; // Raised off ground
+          const posZ = -12; // Wall at back of stage
+          
+          panel.position.set(posX, posY, posZ);
+          scene.add(panel);
+          
+          // Add to LED panels array with animation parameters
+          ledPanels.push({
+            panel: panel,
+            material: panelMaterial,
+            index: x + y * wallWidth,
+            row: y,
+            col: x,
+            phase: (x / wallWidth) + (y / wallHeight),
+            active: true
+          });
+        }
+      }
+    }
+    
+    // Create light bars
+    function createLightBars() {
+      // Create light bars on sides of stage
+      const barCount = 6;
+      const barHeight = 12;
+      
+      // Both left and right side
+      [-1, 1].forEach(side => {
+        for (let i = 0; i < barCount; i++) {
+          // Tall thin bar geometry
+          const barGeometry = new THREE.BoxGeometry(0.4, barHeight, 0.4);
+          
+          // Emissive material for glow
+          const barMaterial = new THREE.MeshStandardMaterial({
+            color: 0x333333,
+            emissive: 0x000000, // Start dark
+            emissiveIntensity: 2,
+            roughness: 0.3
+          });
+          
+          const bar = new THREE.Mesh(barGeometry, barMaterial);
+          
+          // Position along side
+          const posX = side * 18; // Left or right
+          const posY = barHeight / 2; // Half height off ground
+          const posZ = -10 + i * 4; // Spaced out front to back
+          
+          bar.position.set(posX, posY, posZ);
+          scene.add(bar);
+          
+          // Add point light inside the bar for actual illumination
+          const barLight = new THREE.PointLight(0xFFFFFF, 0, 8); // Start with 0 intensity
+          barLight.position.copy(bar.position);
+          scene.add(barLight);
+          
+          // Add to light bars array
+          lightBars.push({
+            bar: bar,
+            light: barLight,
+            material: barMaterial,
+            side: side,
+            index: i,
+            active: true
+          });
+        }
+      });
+    }
+    
+    // Create blinder/audience lights
+    function createBlinders() {
+      // Create row of blinder lights across stage front
+      const blinderCount = 8;
+      
+      for (let i = 0; i < blinderCount; i++) {
+        // Blinder is a spot light pointing at audience
+        const blinderLight = new THREE.SpotLight(0xFFFFFF, 0, 50, Math.PI / 6, 0.5, 2);
+        
+        // Position across front of stage
+        const spread = (blinderCount - 1) * 2.5;
+        const posX = (i * 5) - spread / 2;
+        const posY = 2 + (i % 2); // Alternating heights
+        const posZ = 10; // Front of stage
+        
+        blinderLight.position.set(posX, posY, posZ);
+        
+        // Point toward audience/camera
+        blinderLight.target.position.set(posX, posY, 40);
+        
+        // No shadows needed
+        blinderLight.castShadow = false;
+        
+        // Add to scene
+        scene.add(blinderLight);
+        scene.add(blinderLight.target);
+        
+        // Add to blinders array
+        blinders.push({
+          light: blinderLight,
+          index: i,
+          active: false // Start inactive
+        });
+      }
+    }
+    
+    // Handle window resize
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    // =====================================================
+    // ANIMATION SEQUENCES
+    // =====================================================
+    
+    // Get current beat number from elapsed time
+    function getCurrentBeat(time) {
+      return Math.floor(time / beatDuration);
+    }
+    
+    // Progress to next sequence
+    function nextSequence() {
+      currentSequence = (currentSequence + 1) % 8;
+      sequenceTime = 0;
+      
+      // Change color scheme every other sequence
+      if (currentSequence % 2 === 0) {
+        currentColorScheme = (currentColorScheme + 1) % colorSchemes.length;
+      }
+    }
+    
+    // Main lights animation - moving heads
+    function animateMainLights(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      lightRig.forEach((head, index) => {
+        const light = head.light;
+        const basePos = head.basePosition;
+        
+        // Different movement based on sequence
+        switch(currentSequence) {
+          case 0: // Sweep pattern
+            // Pan movement (horizontal rotation)
+            const panAngle = Math.sin(time * head.panSpeed + head.panPhase) * Math.PI * 0.4;
+            // Tilt movement (vertical angle)
+            const tiltAngle = Math.sin(time * head.tiltSpeed + head.tiltPhase) * Math.PI * 0.3;
+            
+            // Calculate target position using spherical coordinates
+            const targetRadius = 30;
+            const targetX = basePos.x + targetRadius * Math.sin(tiltAngle) * Math.sin(panAngle);
+            const targetY = -5 + targetRadius * Math.cos(tiltAngle);
+            const targetZ = basePos.z + targetRadius * Math.sin(tiltAngle) * Math.cos(panAngle);
+            
+            light.target.position.set(targetX, targetY, targetZ);
+            
+            // Alternate colors
+            if (index % 2 === 0) {
+              light.color.setHex(scheme.primary);
+            } else {
+              light.color.setHex(scheme.secondary);
+            }
+            break;
+            
+          case 1: // Position lights at specific spots with beats
+            // On beat changes, move to new positions
+            if (beat % 2 === 0 && fraction < 0.1) {
+              // Random new position on beat
+              const targetX = (Math.random() - 0.5) * 30;
+              const targetY = Math.random() * 5;
+              const targetZ = (Math.random() - 0.5) * 20;
+              
+              // Move quickly to new position
+              light.target.position.set(targetX, targetY, targetZ);
+              
+              // Color flash
+              light.color.setHex(scheme.accent);
+            } else if (fraction > 0.3 && light.color.getHex() === scheme.accent) {
+              // Reset color after flash
+              light.color.setHex(index % 2 === 0 ? scheme.primary : scheme.secondary);
+            }
+            break;
+            
+          case 2: // Coordinated movement
+            // All lights move in synchronization
+            const phase = time * 0.5;
+            const coordX = 15 * Math.sin(phase);
+            const coordY = 5 + 5 * Math.sin(phase * 1.3);
+            const coordZ = -5 + 10 * Math.cos(phase * 0.7);
+            
+            // Slight offset for each light
+            const offsetX = Math.sin(index * (Math.PI / 3)) * 5;
+            const offsetZ = Math.cos(index * (Math.PI / 3)) * 5;
+            
+            light.target.position.set(coordX + offsetX, coordY, coordZ + offsetZ);
+            
+            // Complementary colors
+            light.color.setHex(index % 3 === 0 ? scheme.primary : 
+                              index % 3 === 1 ? scheme.secondary : scheme.accent);
+            break;
+            
+          case 3: // Chase effect
+            // Lights chase in sequence
+            const chaseOffset = index * (Math.PI / lightRig.length);
+            const beatFraction = (beat % 4) / 4 + fraction / 4;
+            const chasePhase = (beatFraction * Math.PI * 2) + chaseOffset;
+            
+            // Circular motion
+            const chaseX = Math.sin(chasePhase) * 15;
+            const chaseY = 3 + Math.cos(chasePhase) * 3;
+            const chaseZ = Math.cos(chasePhase) * 10;
+            
+            light.target.position.set(chaseX, chaseY, chaseZ);
+            
+            // Color based on position in chase
+            const colorMix = (Math.sin(chasePhase) + 1) / 2;
+            light.color.setHex(colorMix > 0.5 ? scheme.primary : scheme.secondary);
+            break;
+            
+          case 4: // Fan out pattern
+            // Lights fan out in a coordinated pattern
+            // Calculate angle based on index
+            const fanAngle = (index / (lightRig.length - 1)) * Math.PI - (Math.PI / 2);
+            
+            // Fan movement
+            const fanTilt = Math.PI / 4 * (Math.sin(time * 0.2) * 0.5 + 0.5); // 0 to 45 degrees
+            const fanRadius = 25;
+            const fanX = Math.cos(fanAngle) * Math.sin(fanTilt) * fanRadius;
+            const fanY = Math.cos(fanTilt) * fanRadius - fanRadius + 5; // Height adjustment
+            const fanZ = Math.sin(fanAngle) * Math.sin(fanTilt) * fanRadius;
+            
+            light.target.position.set(fanX, fanY, fanZ);
+            
+            // All same color, pulsing
+            light.color.setHex(scheme.primary);
+            light.intensity = head.intensity * (0.7 + Math.sin(time * 2) * 0.3);
+            break;
+            
+          case 5: // Rapid sweep
+            // Fast movement on specific beats
+            const rapidBeat = beat % 16;
+            if (rapidBeat === 0 || rapidBeat === 4 || rapidBeat === 8 || rapidBeat === 12) {
+              // Fast sweep on these beats
+              const sweepX = 20 * Math.sin(time * 8 + index);
+              const sweepY = 10 * Math.cos(time * 8 + index) - 5;
+              const sweepZ = 10 * Math.sin(time * 12 + index);
+              
+              light.target.position.set(sweepX, sweepY, sweepZ);
+              light.color.setHex(scheme.accent);
+              light.intensity = head.intensity * 1.5;
+            } else {
+              // Slower movement otherwise
+              const slowX = 10 * Math.sin(time * 0.2 + index);
+              const slowY = 5 * Math.cos(time * 0.3 + index);
+              const slowZ = 8 * Math.sin(time * 0.25 + index);
+              
+              light.target.position.set(slowX, slowY, slowZ);
+              light.color.setHex(index % 2 === 0 ? scheme.primary : scheme.secondary);
+              light.intensity = head.intensity * 0.8;
+            }
+            break;
+            
+          case 6: // Theatrical spots
+            // Static spotlight positions with occasional movement
+            if (beat % 8 === 0 && fraction < 0.1) {
+              // Move to new position
+              const spotX = (Math.random() - 0.5) * 20;
+              const spotY = 0;
+              const spotZ = (Math.random() - 0.5) * 15;
+              
+              light.target.position.set(spotX, spotY, spotZ);
+            }
+            
+            // White lights
+            light.color.setHex(0xFFFFFF);
+            
+            // Intensity based on position
+            const distanceFromCenter = light.target.position.length();
+            light.intensity = head.intensity * (0.5 + 0.5 * (distanceFromCenter / 20));
+            break;
+            
+          case 7: // Build up to drop
+            // Gradual increase in movement and intensity
+            const buildupProgress = Math.min(1, sequenceTime / 16); // 16 second buildup
+            
+            // Increase movement range
+            const buildRadius = 10 + 20 * buildupProgress;
+            const buildSpeed = 0.5 + 3 * buildupProgress;
+            
+            // Oscillating movement that gets faster
+            const buildX = Math.sin(time * buildSpeed + head.panPhase) * buildRadius;
+            const buildY = 5 * Math.cos(time * (buildSpeed * 0.7) + head.tiltPhase);
+            const buildZ = Math.cos(time * buildSpeed + head.panPhase) * buildRadius;
+            
+            light.target.position.set(buildX, buildY, buildZ);
+            
+            // Increase intensity
+            light.intensity = head.intensity * (0.5 + 1.5 * buildupProgress);
+            
+            // Faster color changes
+            const colorFlashSpeed = 1 + 10 * buildupProgress;
+            const colorPhase = (Math.sin(time * colorFlashSpeed + index) + 1) / 2;
+            
+            if (colorPhase < 0.33) {
+              light.color.setHex(scheme.primary);
+            } else if (colorPhase < 0.66) {
+              light.color.setHex(scheme.secondary);
+            } else {
+              light.color.setHex(scheme.accent);
+            }
+            break;
+        }
+      });
+    }
+    
+    // Beam lights animation
+    function animateBeamLights(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      beamLights.forEach((beam, index) => {
+        const light = beam.light;
+        
+        // Different animation based on sequence
+        switch(currentSequence) {
+          case 0: // X pattern crossing
+            if (index % 2 === 0) {
+              // Crossing pattern
+              const targetX = -beam.side * 15; // Cross to opposite side
+              const targetY = 10 + 5 * Math.sin(time * 0.5 + beam.phase);
+              const targetZ = -5 + 10 * Math.cos(time * 0.3 + beam.phase);
+              
+              light.target.position.set(targetX, targetY, targetZ);
+              light.color.setHex(scheme.primary);
+            } else {
+              // Vertical sweep
+              const targetX = beam.side * 5 * Math.sin(time * 0.2 + beam.phase);
+              const targetY = 5 + 15 * Math.abs(Math.sin(time * 0.4 + beam.phase));
+              const targetZ = -5 + 5 * Math.cos(time * 0.3 + beam.phase);
+              
+              light.target.position.set(targetX, targetY, targetZ);
+              light.color.setHex(scheme.secondary);
+            }
+            
+            // Constant intensity
+            light.intensity = 10;
+            break;
+            
+          case 1: // Beat synchronized movement
+            // On beat hits, move to new positions
+            if (beat % 2 === 0 && fraction < 0.1) {
+              // Sharp movement on beat
+              const targetX = (Math.random() - 0.5) * 30;
+              const targetY = 5 + Math.random() * 10;
+              const targetZ = (Math.random() - 0.5) * 20;
+              
+              light.target.position.set(targetX, targetY, targetZ);
+              light.intensity = 15; // Brighter on beat
+              light.color.setHex(scheme.accent);
+            } else if (fraction > 0.3 && light.intensity === 15) {
+              // Dim after beat hit
+              light.intensity = 5;
+              light.color.setHex(beam.index % 2 === 0 ? scheme.primary : scheme.secondary);
+            }
+            break;
+            
+          case 2: // Coordinated fan out
+            // All beams on one side move together
+            const fanAngle = (Math.PI / 4) * Math.sin(time * 0.3) + (Math.PI / 4); // 0 to 90 degrees
+            const angleOffset = (beam.index / 4) * (Math.PI / 4); // Spread beams out
+            
+            const fanX = beam.side * 15 * Math.cos(fanAngle + angleOffset);
+            const fanY = 15 * Math.sin(fanAngle + angleOffset);
+            const fanZ = -5;
+            
+            light.target.position.set(fanX, fanY, fanZ);
+            
+            // Color based on side
+            light.color.setHex(beam.side < 0 ? scheme.primary : scheme.secondary);
+            
+            // Full intensity
+            light.intensity = 10;
+            break;
+            
+          case 3: // Chase effect
+            // Beams chase in sequence
+            const beamGroupSize = 4; // 4 beams per side
+            const beamPosition = beam.index % beamGroupSize;
+            const beamPhase = (beat % 4) / 4 + fraction / 4;
+            const chaseOffset = (beamPosition / beamGroupSize) * Math.PI * 2;
+            const chasePhase = (beamPhase * Math.PI * 2) + chaseOffset;
+            
+            // Circular chase path
+            const chaseX = 15 * Math.sin(chasePhase) * beam.side;
+            const chaseY = 5 + 10 * Math.cos(chasePhase);
+            const chaseZ = -5 + 10 * Math.sin(chasePhase * 2);
+            
+            light.target.position.set(chaseX, chaseY, chaseZ);
+            
+            // Intensity peaks at center of chase
+            const intensityPeak = Math.sin(chasePhase) * 0.5 + 0.5;
+            light.intensity = 5 + intensityPeak * 10;
+            
+            // Color follows intensity
+            if (intensityPeak > 0.7) {
+              light.color.setHex(scheme.accent);
+            } else {
+              light.color.setHex(beam.side < 0 ? scheme.primary : scheme.secondary);
+            }
+            break;
+            
+          case 4: // Horizontal wave
+            // Horizontal wave pattern
+            const waveOffset = (beam.index % 4) / 4;
+            const wavePhase = time * 0.5 + waveOffset * Math.PI * 2;
+            
+            const waveX = beam.side * 15 * Math.cos(wavePhase * 0.5);
+            const waveY = 7;
+            const waveZ = -10 + beam.index * 5 * Math.sin(wavePhase);
+            
+            light.target.position.set(waveX, waveY, waveZ);
+            
+            // All same color, alternating with beat
+            light.color.setHex(beat % 2 === 0 ? scheme.primary : scheme.secondary);
+            
+            // Pulsing intensity
+            light.intensity = 7 + 5 * Math.sin(time * 2);
+            break;
+            
+          case 5: // Sharp movements
+            // Sharp, staccato movements
+            if (beat % 2 === 0 && fraction < 0.1) {
+              // New random position on beat
+              const sharpX = beam.side * (10 + Math.random() * 10);
+              const sharpY = Math.random() * 15 + 5;
+              const sharpZ = (Math.random() - 0.5) * 20;
+              
+              light.target.position.set(sharpX, sharpY, sharpZ);
+              
+              // Flash on beat
+              light.intensity = 15;
+              light.color.setHex(scheme.accent);
+            } else if (fraction > 0.3 && light.intensity === 15) {
+              // Dim between beats
+              light.intensity = 5;
+              light.color.setHex(beam.index % 2 === 0 ? scheme.primary : scheme.secondary);
+            }
+            break;
+            
+          case 6: // Symmetrical pattern
+            // Symmetrical pattern between left and right beams
+            const symmetryAngle = Math.sin(time * 0.3 + beam.index * 0.5) * Math.PI * 0.3;
+            const heightFactor = Math.cos(time * 0.2 + beam.index * 0.5) * 0.5 + 0.5;
+            
+            const symX = beam.side * 15 * Math.cos(symmetryAngle);
+            const symY = 5 + 15 * heightFactor;
+            const symZ = -5 - 10 * Math.sin(symmetryAngle);
+            
+            light.target.position.set(symX, symY, symZ);
+            
+            // Complementary colors on each side
+            light.color.setHex(beam.side < 0 ? scheme.primary : scheme.secondary);
+            
+            // Constant intensity
+            light.intensity = 10;
+            break;
+            
+          case 7: // Build up movement
+            // Increasing movement and intensity
+            const beamBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // More erratic movement as buildup progresses
+            const buildupSpeed = 0.5 + 5 * beamBuildupProgress;
+            const buildupRange = 10 + 20 * beamBuildupProgress;
+            
+            const buildupX = beam.side * buildupRange * Math.cos(time * buildupSpeed + beam.phase);
+            const buildupY = 5 + buildupRange * 0.5 * Math.sin(time * buildupSpeed * 1.3 + beam.phase);
+            const buildupZ = -5 + buildupRange * 0.5 * Math.sin(time * buildupSpeed * 0.7 + beam.phase * 2);
+            
+            light.target.position.set(buildupX, buildupY, buildupZ);
+            
+            // Increasing intensity
+            light.intensity = 5 + 15 * beamBuildupProgress;
+            
+            // Faster color changes
+            const beamColorPhase = (Math.sin(time * (1 + 5 * beamBuildupProgress) + beam.index) + 1) / 2;
+            if (beamColorPhase < 0.33) {
+              light.color.setHex(scheme.primary);
+            } else if (beamColorPhase < 0.66) {
+              light.color.setHex(scheme.secondary);
+            } else {
+              light.color.setHex(scheme.accent);
+            }
+            break;
+        }
+      });
+    }
+    
+    // Laser animation
+    function animateLasers(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      laserSystems.forEach((system, sysIndex) => {
+        // Different laser patterns based on sequence
+        let systemActive = true;
+        let systemColor = scheme.primary;
+        
+        switch(currentSequence) {
+          case 0: // Simple sweep
+            // Only activate lasers occasionally
+            systemActive = (beat % 8 >= 4);
+            systemColor = scheme.secondary;
+            break;
+            
+          case 1: // Beat hits
+            // Activate on specific beats
+            systemActive = (beat % 4 === 0 && fraction < 0.5);
+            systemColor = scheme.accent;
+            break;
+            
+          case 2: // Slow movements
+            systemActive = true;
+            systemColor = sysIndex % 2 === 0 ? scheme.primary : scheme.secondary;
+            break;
+            
+          case 3: // Active chase
+            systemActive = true;
+            
+            // Alternate colors with beat
+            if (beat % 2 === 0) {
+              systemColor = scheme.primary;
+            } else {
+              systemColor = scheme.secondary;
+            }
+            break;
+            
+          case 4: // Periodic pulses
+            // Pulse lasers in and out
+            systemActive = Math.sin(time * 2 + sysIndex * (Math.PI / 2)) > 0;
+            systemColor = scheme.primary;
+            break;
+            
+          case 5: // Coordinated sharp movements
+            systemActive = true;
+            
+            // Flash on beat hits
+            if (beat % 2 === 0 && fraction < 0.2) {
+              systemColor = scheme.accent;
+            } else {
+              systemColor = sysIndex % 2 === 0 ? scheme.primary : scheme.secondary;
+            }
+            break;
+            
+          case 6: // Geometric patterns
+            systemActive = true;
+            systemColor = scheme.secondary;
+            break;
+            
+          case 7: // Build up
+            // Lasers get more active during buildup
+            const laserBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // More activity as buildup progresses
+            systemActive = Math.random() < (0.3 + 0.7 * laserBuildupProgress);
+            
+            // Rapid color changes
+            const colorOptions = [scheme.primary, scheme.secondary, scheme.accent];
+            const colorIndex = Math.floor(time * (1 + 5 * laserBuildupProgress)) % colorOptions.length;
+            systemColor = colorOptions[colorIndex];
+            break;
+        }
+        
+        // Update system active state and color
+        system.active = systemActive;
+        system.color = systemColor;
+        
+        // Animate each beam in the system
+        if (system.active) {
+          system.beams.forEach((laser, index) => {
+            const beam = laser.beam;
+            
+            // Set laser color (all beams in system have same color)
+            beam.color.setHex(system.color);
+            
+            // Different movement patterns based on sequence and laser mode
+            let targetX = 0, targetY = 0, targetZ = 0;
+            
+            if (currentSequence === 0 || currentSequence === 1) {
+              // Simple sweeping motions
+              const sweepSpeed = 0.5 + laser.speedFactor * 0.5;
+              targetX = 15 * Math.sin(time * sweepSpeed + laser.phase);
+              targetY = 10 * Math.abs(Math.cos(time * sweepSpeed * 0.7 + laser.phase));
+              targetZ = -5;
+            } 
+            else if (currentSequence === 2) {
+              // Slow circular patterns
+              const radius = 15;
+              const circleX = Math.sin(time * 0.3 + laser.phase) * radius;
+              const circleY = 5 + Math.cos(time * 0.3 + laser.phase) * radius * 0.5;
+              const circleZ = Math.cos(time * 0.3 + laser.phase * 2) * radius;
+              
+              targetX = circleX;
+              targetY = circleY;
+              targetZ = circleZ;
+            }
+            else if (currentSequence === 3) {
+              // Chase patterns
+              const chaseOffset = index * (Math.PI / system.beams.length);
+              const chasePhase = (beat % 4) / 4 + fraction / 4;
+              const fullPhase = (chasePhase * Math.PI * 2) + chaseOffset;
+              
+              targetX = 15 * Math.sin(fullPhase);
+              targetY = 5 + 5 * Math.sin(fullPhase * 2);
+              targetZ = 5 * Math.cos(fullPhase);
+            }
+            else if (currentSequence === 4) {
+              // Fan patterns
+              const fanSpread = Math.PI * 0.6; // 60 degree spread
+              const fanAngle = ((index / (system.beams.length - 1)) * fanSpread) - (fanSpread / 2);
+              const fanTilt = Math.PI / 4 * (Math.sin(time * 0.2) * 0.5 + 0.5); // 0 to 45 degrees
+              
+              const fanRadius = 25;
+              targetX = Math.cos(fanAngle) * Math.sin(fanTilt) * fanRadius;
+              targetY = Math.cos(fanTilt) * fanRadius - fanRadius + 10; // Height adjustment
+              targetZ = Math.sin(fanAngle) * Math.sin(fanTilt) * fanRadius;
+            }
+            else if (currentSequence === 5) {
+              // Sharp angular movements
+              if (beat % 2 === 0 && fraction < 0.1 && Math.random() < 0.5) {
+                // New position on some beats
+                targetX = (Math.random() - 0.5) * 30;
+                targetY = Math.random() * 15;
+                targetZ = (Math.random() - 0.5) * 20;
+                
+                // Store as new position
+                beam.userData = {lastTarget: {x: targetX, y: targetY, z: targetZ}};
+              } else if (beam.userData && beam.userData.lastTarget) {
+                // Maintain last position
+                targetX = beam.userData.lastTarget.x;
+                targetY = beam.userData.lastTarget.y;
+                targetZ = beam.userData.lastTarget.z;
+              } else {
+                // Default position if no last target
+                targetX = (Math.random() - 0.5) * 20;
+                targetY = 10;
+                targetZ = -5;
+                beam.userData = {lastTarget: {x: targetX, y: targetY, z: targetZ}};
+              }
+            }
+            else if (currentSequence === 6) {
+              // Geometric patterns
+              const geoMode = Math.floor(time) % 3;
+              
+              if (geoMode === 0) {
+                // Square pattern
+                const squareSize = 15;
+                const cornerIndex = Math.floor(time * 0.2 + index) % 4;
+                
+                if (cornerIndex === 0) {
+                  targetX = -squareSize; targetY = 5; targetZ = -squareSize;
+                } else if (cornerIndex === 1) {
+                  targetX = squareSize; targetY = 5; targetZ = -squareSize;
+                } else if (cornerIndex === 2) {
+                  targetX = squareSize; targetY = 5; targetZ = squareSize;
+                } else {
+                  targetX = -squareSize; targetY = 5; targetZ = squareSize;
+                }
+              } else if (geoMode === 1) {
+                // Triangular pattern
+                const triSize = 20;
+                const triIndex = Math.floor(time * 0.2 + index) % 3;
+                
+                if (triIndex === 0) {
+                  targetX = 0; targetY = 20; targetZ = 0;
+                } else if (triIndex === 1) {
+                  targetX = -triSize; targetY = 0; targetZ = 0;
+                } else {
+                  targetX = triSize; targetY = 0; targetZ = 0;
+                }
+              } else {
+                // Line pattern
+                const lineLength = 30;
+                const lineFraction = ((index / system.beams.length) + (time * 0.1)) % 1;
+                targetX = (lineFraction * 2 - 1) * lineLength;
+                targetY = 5 + Math.sin(time * 0.5 + index) * 5;
+                targetZ = -5;
+              }
+            }
+            else if (currentSequence === 7) {
+              // Build up - increasingly chaotic
+              const buildupProgress = Math.min(1, sequenceTime / 16);
+              
+              // Speed increases with progress
+              const chaosSpeed = 0.5 + 4 * buildupProgress;
+              const chaosRange = 10 + 20 * buildupProgress;
+              
+              targetX = Math.sin(time * chaosSpeed + laser.phase) * chaosRange;
+              targetY = 5 + Math.cos(time * chaosSpeed * 1.3 + laser.phase) * chaosRange * 0.5;
+              targetZ = Math.sin(time * chaosSpeed * 0.7 + laser.phase * 2) * chaosRange;
+            }
+            
+            // Set beam target
+            beam.target.position.set(targetX, targetY, targetZ);
+            
+            // Set beam intensity
+            beam.intensity = system.active ? 8 : 0;
+          });
+        } else {
+          // Turn off all beams in inactive systems
+          system.beams.forEach(laser => {
+            laser.beam.intensity = 0;
+          });
+        }
+      });
+    }
+    
+    // LED panel animation
+    function animateLEDPanels(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      ledPanels.forEach((panel, index) => {
+        // Different patterns based on sequence
+        let emissiveColor = 0x000000; // Default off
+        let emissiveIntensity = 0;
+        
+        switch(currentSequence) {
+          case 0: // Simple chase pattern
+            // Row by row activation
+            const rowChase = (Math.floor(time * 2) % 4);
+            
+            if (panel.row === rowChase) {
+              emissiveColor = scheme.primary;
+              emissiveIntensity = 1;
+            } else {
+              emissiveColor = 0x000000;
+              emissiveIntensity = 0;
+            }
+            break;
+            
+          case 1: // Beat hits - all flash together
+            if (beat % 2 === 0 && fraction < 0.3) {
+              emissiveColor = scheme.accent;
+              emissiveIntensity = 1;
+            } else {
+              emissiveColor = 0x000000;
+              emissiveIntensity = 0;
+            }
+            break;
+            
+          case 2: // Ripple pattern from center
+            const centerX = 3; // Center column
+            const centerY = 1.5; // Center row
+            
+            const distFromCenter = Math.sqrt(
+              Math.pow(panel.col - centerX, 2) + 
+              Math.pow(panel.row - centerY, 2)
+            );
+            
+            const maxDist = Math.sqrt(Math.pow(3, 2) + Math.pow(2, 2));
+            const ripplePhase = (time * 0.5) % 1;
+            const rippleSize = 0.3; // Size of the ripple
+            
+            // Distance check for ripple
+            const normalizedDist = distFromCenter / maxDist;
+            const diff = Math.abs(normalizedDist - ripplePhase);
+            
+            if (diff < rippleSize) {
+              // Panel is in the ripple
+              emissiveColor = scheme.primary;
+              emissiveIntensity = 1 - (diff / rippleSize);
+            } else {
+              // Panel is outside the ripple
+              emissiveColor = scheme.secondary;
+              emissiveIntensity = 0.1;
+            }
+            break;
+            
+          case 3: // Random flashing
+            if (Math.random() < 0.05) {
+              // 5% chance to change state
+              panel.active = !panel.active;
+            }
+            
+            if (panel.active) {
+              // Active panels use primary or secondary color
+              emissiveColor = (index % 2 === 0) ? scheme.primary : scheme.secondary;
+              emissiveIntensity = 1;
+            } else {
+              emissiveColor = 0x000000;
+              emissiveIntensity = 0;
+            }
+            break;
+            
+          case 4: // Gradient wave
+            const wavePhase = (time * 0.5 + (panel.col / 7) + (panel.row / 4)) % 1;
+            
+            if (wavePhase < 0.5) {
+              // First half of cycle - primary color
+              emissiveColor = scheme.primary;
+              emissiveIntensity = Math.sin(wavePhase * Math.PI);
+            } else {
+              // Second half - secondary color
+              emissiveColor = scheme.secondary;
+              emissiveIntensity = Math.sin((wavePhase - 0.5) * Math.PI);
+            }
+            break;
+            
+          case 5: // Beat-synchronized patterns
+            const patternType = Math.floor(beat / 4) % 3;
+            
+            if (patternType === 0) {
+              // Checkerboard pattern
+              const isEven = (panel.row + panel.col) % 2 === 0;
+              if (isEven) {
+                emissiveColor = beat % 2 === 0 ? scheme.primary : scheme.secondary;
+              } else {
+                emissiveColor = beat % 2 === 0 ? scheme.secondary : scheme.primary;
+              }
+              emissiveIntensity = 1;
+            } 
+            else if (patternType === 1) {
+              // Vertical bars
+              if (panel.col % 2 === beat % 2) {
+                emissiveColor = scheme.primary;
+              } else {
+                emissiveColor = scheme.secondary;
+              }
+              emissiveIntensity = 1;
+            }
+            else {
+              // Horizontal bars
+              if (panel.row % 2 === beat % 2) {
+                emissiveColor = scheme.primary;
+              } else {
+                emissiveColor = scheme.secondary;
+              }
+              emissiveIntensity = 1;
+            }
+            break;
+            
+          case 6: // Image/letter effects
+            // Simple scrolling text/image effect
+            const patterns = [
+              // Array pattern 1 - Heart shape
+              [
+                [0,1,0,1,0,1,0],
+                [1,0,1,0,1,0,1],
+                [1,0,0,0,0,0,1],
+                [0,1,0,0,0,1,0]
+              ],
+              // Array pattern 2 - Smiley face
+              [
+                [0,1,1,0,1,1,0],
+                [0,1,1,0,1,1,0],
+                [0,0,0,0,0,0,0],
+                [1,0,0,0,0,0,1]
+              ],
+              // Array pattern 3 - Star shape
+              [
+                [0,0,1,1,1,0,0],
+                [0,1,0,1,0,1,0],
+                [1,0,0,1,0,0,1],
+                [0,1,1,0,1,1,0]
+              ]
+            ];
+            
+            // Select pattern based on time
+            const patternIndex = Math.floor(time / 3) % patterns.length;
+            const pattern = patterns[patternIndex];
+            
+            // Check if panel is active in current pattern
+            if (panel.row < pattern.length && panel.col < pattern[0].length) {
+              if (pattern[panel.row][panel.col] === 1) {
+                emissiveColor = scheme.accent;
+                emissiveIntensity = 1;
+              } else {
+                emissiveColor = scheme.primary;
+                emissiveIntensity = 0.2;
+              }
+            } else {
+              emissiveColor = 0x000000;
+              emissiveIntensity = 0;
+            }
+            break;
+            
+          case 7: // Build up to drop
+            const panelBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // Increasing activity
+            if (sequenceTime < 8) {
+              // First half - linear activity increase
+              const rowActivation = Math.floor(4 * sequenceTime / 8);
+              
+              if (panel.row <= rowActivation) {
+                emissiveColor = scheme.primary;
+                emissiveIntensity = panelBuildupProgress;
+              } else {
+                emissiveColor = 0x000000;
+                emissiveIntensity = 0;
+              }
+            } else {
+              // Second half - flash rate increases
+              const flashRate = 0.5 + 5 * ((sequenceTime - 8) / 8);
+              const flashState = Math.sin(time * flashRate + panel.index) > 0;
+              
+              if (flashState) {
+                // Alternate between colors
+                emissiveColor = panel.index % 3 === 0 ? scheme.primary : 
+                               panel.index % 3 === 1 ? scheme.secondary : scheme.accent;
+                emissiveIntensity = 1;
+              } else {
+                emissiveColor = 0x000000;
+                emissiveIntensity = 0;
+              }
+            }
+            break;
+        }
+        
+        // Apply color and intensity to panel
+        panel.material.emissive.setHex(emissiveColor);
+        panel.material.emissiveIntensity = emissiveIntensity;
+      });
+    }
+    
+    // Light bar animation
+    function animateLightBars(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      lightBars.forEach((bar, index) => {
+        // Different patterns based on sequence
+        let barColor = 0x000000; // Default off
+        let barIntensity = 0;
+        let lightColor = 0x000000;
+        let lightIntensity = 0;
+        
+        switch(currentSequence) {
+          case 0: // Simple chase
+            // Bars light up in sequence
+            const barChase = Math.floor(time * 4) % lightBars.length;
+            
+            if (index === barChase) {
+              barColor = scheme.primary;
+              barIntensity = 1;
+              lightColor = scheme.primary;
+              lightIntensity = 5;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 1: // Beat hits
+            if (beat % 2 === 0 && fraction < 0.3) {
+              barColor = scheme.accent;
+              barIntensity = 1;
+              lightColor = scheme.accent;
+              lightIntensity = 8;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 2: // Wave pattern
+            const waveSpeed = 3;
+            const waveSize = 3; // Number of bars in wave
+            
+            const wavePosition = (time * waveSpeed) % (lightBars.length * 2);
+            const normalizedPos = Math.abs(wavePosition - lightBars.length) / lightBars.length;
+            
+            const distFromWave = Math.abs(index / lightBars.length - normalizedPos);
+            
+            if (distFromWave < (waveSize / lightBars.length)) {
+              // Bar is in wave
+              barColor = scheme.primary;
+              barIntensity = 1 - (distFromWave / (waveSize / lightBars.length));
+              lightColor = scheme.primary;
+              lightIntensity = 5 * barIntensity;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 3: // Alternate sides
+            // Bars alternate between left and right
+            if ((beat % 2 === 0 && bar.side < 0) || (beat % 2 === 1 && bar.side > 0)) {
+              barColor = scheme.primary;
+              barIntensity = 1;
+              lightColor = scheme.primary;
+              lightIntensity = 5;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 4: // All pulse together
+            // All bars pulse together
+            const pulseIntensity = (Math.sin(time * 2) + 1) / 2;
+            
+            barColor = scheme.secondary;
+            barIntensity = pulseIntensity;
+            lightColor = scheme.secondary;
+            lightIntensity = 5 * pulseIntensity;
+            break;
+            
+          case 5: // VU meter style
+            // Simulate VU meter bars
+            const vuLevel = (Math.sin(time) + 1) / 2; // 0 to 1
+            const activeLevel = Math.floor(vuLevel * 6); // 0 to 6 bars
+            
+            if (bar.index < activeLevel) {
+              if (bar.index < 2) {
+                barColor = 0x00FF00; // Green for lower levels
+              } else if (bar.index < 4) {
+                barColor = 0xFFFF00; // Yellow for mid levels
+              } else {
+                barColor = 0xFF0000; // Red for high levels
+              }
+              
+              barIntensity = 1;
+              lightColor = barColor;
+              lightIntensity = 5;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 6: // Mirror effect
+            // Mirror effect between sides
+            const position = (bar.index % 3);
+            
+            if (Math.floor(time * 3) % 3 === position) {
+              barColor = bar.side < 0 ? scheme.primary : scheme.secondary;
+              barIntensity = 1;
+              lightColor = barColor;
+              lightIntensity = 5;
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+            
+          case 7: // Build up
+            const barBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // More bars activate as buildup progresses
+            const activationThreshold = 1 - barBuildupProgress;
+            
+            if (bar.index / 6 < barBuildupProgress) {
+              // Bar is active
+              const flashRate = 1 + 10 * barBuildupProgress;
+              const flashState = Math.sin(time * flashRate + bar.index) > 0;
+              
+              if (flashState) {
+                barColor = bar.side < 0 ? scheme.primary : scheme.secondary;
+                barIntensity = 1;
+                lightColor = barColor;
+                lightIntensity = 5;
+              } else {
+                barColor = 0x000000;
+                barIntensity = 0;
+                lightColor = 0x000000;
+                lightIntensity = 0;
+              }
+            } else {
+              barColor = 0x000000;
+              barIntensity = 0;
+              lightColor = 0x000000;
+              lightIntensity = 0;
+            }
+            break;
+        }
+        
+        // Apply colors and intensity
+        bar.material.emissive.setHex(barColor);
+        bar.material.emissiveIntensity = barIntensity;
+        bar.light.color.setHex(lightColor);
+        bar.light.intensity = lightIntensity;
+      });
+    }
+    
+    // Blinder lights animation
+    function animateBlinders(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      blinders.forEach((blinder, index) => {
+        // Different patterns based on sequence
+        let blinderIntensity = 0;
+        
+        switch(currentSequence) {
+          case 0: // Occasional flash
+            if (Math.random() < 0.01) { // 1% chance per frame
+              blinder.active = true;
+              setTimeout(() => { blinder.active = false; }, 200); // Short flash
+            }
+            
+            blinderIntensity = blinder.active ? 50 : 0;
+            break;
+            
+          case 1: // Beat hits
+            // Flash on every other beat
+            if (beat % 4 === 0 && fraction < 0.2) {
+              blinderIntensity = 80; // Extra bright
+            } else {
+              blinderIntensity = 0;
+            }
+            break;
+            
+          case 2: // Left to right sweep
+            // Sequential activation
+            const sweepDuration = 1; // 1 second sweep
+            const normalizedTime = (time % sweepDuration) / sweepDuration;
+            const normalizedPosition = index / (blinders.length - 1);
+            
+            // Distance from sweep
+            const distFromSweep = Math.abs(normalizedTime - normalizedPosition);
+            
+            if (distFromSweep < 0.1) {
+              blinderIntensity = 50 * (1 - distFromSweep / 0.1);
+            } else {
+              blinderIntensity = 0;
+            }
+            break;
+            
+          case 3: // Alternating pattern
+            // Alternating every other blinder
+            if (beat % 2 === 0) {
+              blinderIntensity = (index % 2 === 0) ? 40 : 0;
+            } else {
+              blinderIntensity = (index % 2 === 1) ? 40 : 0;
+            }
+            break;
+            
+          case 4: // All pulse together
+            // Synchronized pulsing
+            blinderIntensity = 30 * Math.pow(Math.sin(time * 2) * 0.5 + 0.5, 3); // Sharper pulses
+            break;
+            
+          case 5: // Random stuttering
+            // Random stutter effect
+            if (Math.floor(time * 20) % 3 === index % 3) {
+              blinderIntensity = 60;
+            } else {
+              blinderIntensity = 0;
+            }
+            break;
+            
+          case 6: // Theatrical moments
+            // Mostly off with occasional full blasts
+            if (Math.floor(time) % 16 === 0 && fraction < 0.5) {
+              blinderIntensity = 100; // Full blast
+            } else {
+              blinderIntensity = 0;
+            }
+            break;
+            
+          case 7: // Build up
+            const blinderBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // Increase frequency and intensity with buildup
+            const flashProbability = 0.01 + 0.3 * blinderBuildupProgress;
+            const maxIntensity = 20 + 80 * blinderBuildupProgress;
+            
+            if (Math.random() < flashProbability) {
+              blinder.active = true;
+              setTimeout(() => { blinder.active = false; }, 100 + Math.random() * 200);
+            }
+            
+            blinderIntensity = blinder.active ? maxIntensity : 0;
+            
+            // Final climax
+            if (sequenceTime > 15.5) {
+              blinderIntensity = 100; // All on at full blast
+            }
+            break;
+        }
+        
+        // Apply intensity
+        blinder.light.intensity = blinderIntensity;
+      });
+    }
+    
+    // Camera animation
+    function animateCamera(time, beat, fraction) {
+      // Different camera movements based on sequence
+      switch(currentSequence) {
+        case 0: // Gentle floating
+          camera.position.x = Math.sin(time * 0.1) * 5;
+          camera.position.y = 5 + Math.sin(time * 0.07) * 2;
+          camera.position.z = 30 + Math.sin(time * 0.05) * 3;
+          break;
+          
+        case 1: // Beat-synchronized motion
+          camera.position.x = Math.sin(time * 0.2) * 8;
+          
+          // Small bump on beat
+          if (beat % 2 === 0 && fraction < 0.1) {
+            camera.position.y = 5 + Math.sin(fraction * Math.PI * 10);
+          } else {
+            camera.position.y = 5;
+          }
+          
+          camera.position.z = 30;
+          break;
+          
+        case 2: // Circling movement
+          const circleRadius = 20;
+          const circleSpeed = 0.1;
+          
+          camera.position.x = Math.sin(time * circleSpeed) * circleRadius;
+          camera.position.y = 5 + Math.sin(time * circleSpeed * 0.5) * 3;
+          camera.position.z = Math.cos(time * circleSpeed) * circleRadius + 20;
+          break;
+          
+        case 3: // Dynamic movement
+          // More active camera movement
+          camera.position.x = 15 * Math.sin(time * 0.3);
+          camera.position.y = 8 + 3 * Math.sin(time * 0.4);
+          camera.position.z = 25 + 5 * Math.cos(time * 0.2);
+          break;
+          
+        case 4: // Higher angle
+          // Higher position looking down
+          camera.position.x = 5 * Math.sin(time * 0.1);
+          camera.position.y = 20 + 5 * Math.sin(time * 0.05);
+          camera.position.z = 20 + 3 * Math.cos(time * 0.1);
+          break;
+          
+        case 5: // Quick movements
+          // Sharper camera changes
+          if (beat % 4 === 0 && fraction < 0.05) {
+            // New random position on some beats
+            camera.position.x = (Math.random() - 0.5) * 20;
+            camera.position.y = 5 + Math.random() * 10;
+            camera.position.z = 20 + Math.random() * 10;
+          }
+          break;
+          
+        case 6: // Slow artistic shots
+          // Slow, cinematic movements
+          camera.position.x = 10 * Math.sin(time * 0.05);
+          camera.position.y = 10 + 5 * Math.sin(time * 0.03);
+          camera.position.z = 20 + 10 * Math.cos(time * 0.04);
+          break;
+          
+        case 7: // Build up motion
+          const camBuildupProgress = Math.min(1, sequenceTime / 16);
+          
+          // Camera becomes more active during buildup
+          const movementRange = 5 + 15 * camBuildupProgress;
+          const movementSpeed = 0.1 + 0.3 * camBuildupProgress;
+          
+          camera.position.x = movementRange * Math.sin(time * movementSpeed);
+          camera.position.y = 5 + movementRange * 0.3 * Math.sin(time * movementSpeed * 1.1);
+          camera.position.z = 30 - 10 * camBuildupProgress + movementRange * 0.2 * Math.cos(time * movementSpeed * 0.9);
+          
+          // Faster movement in final moments
+          if (sequenceTime > 15) {
+            camera.position.y += Math.sin(time * 10) * camBuildupProgress * 2;
+          }
+          break;
+      }
+      
+      // Always look at center of stage
+      camera.lookAt(0, 5, 0);
+    }
+    
+    // Animate fog/haze for atmosphere
+    // Animate pencil beams
+    function animatePencilBeams(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      pencilBeams.forEach((pencil, index) => {
+        const beam = pencil.beam;
+        const gridPosition = { x: pencil.gridX, z: pencil.gridZ };
+        
+        // Different patterns based on sequence
+        switch(currentSequence) {
+          case 0: // Matrix-like grid patterns
+            // Sequential column activation
+            const activeColumn = Math.floor(time * 2) % 4;
+            
+            if (gridPosition.x === activeColumn) {
+              beam.intensity = 15;
+              beam.color.setHex(scheme.primary);
+              
+              // Straight down
+              beam.target.position.set(
+                pencil.basePosition.x,
+                0,
+                pencil.basePosition.z
+              );
+            } else {
+              beam.intensity = 0;
+            }
+            break;
+            
+          case 1: // Beat synchronized grid
+            if (beat % 4 === 0 && fraction < 0.2) {
+              // All beams on beat
+              beam.intensity = 20;
+              beam.color.setHex(scheme.accent);
+              
+              // Random spread on beat hit
+              beam.target.position.set(
+                pencil.basePosition.x + (Math.random() - 0.5) * 10,
+                0,
+                pencil.basePosition.z + (Math.random() - 0.5) * 10
+              );
+            } else if (beat % 2 === 1 && fraction < 0.2) {
+              // Alternating pattern on half beats
+              if ((gridPosition.x + gridPosition.z) % 2 === 0) {
+                beam.intensity = 15;
+                beam.color.setHex(scheme.secondary);
+                
+                // Slight movement
+                beam.target.position.set(
+                  pencil.basePosition.x + Math.sin(time * 2) * 5,
+                  0,
+                  pencil.basePosition.z + Math.cos(time * 2) * 5
+                );
+              } else {
+                beam.intensity = 0;
+              }
+            } else {
+              beam.intensity = 0;
+            }
+            break;
+            
+          case 2: // Geometric patterns
+            // Switch between different geometric formations
+            const patternType = Math.floor(time) % 4;
+            
+            if (patternType === 0) {
+              // Diamond pattern
+              if ((gridPosition.x + gridPosition.z) % 2 === 0) {
+                beam.intensity = 15;
+                beam.color.setHex(scheme.primary);
+              } else {
+                beam.intensity = 0;
+              }
+            } 
+            else if (patternType === 1) {
+              // Circular pattern from center
+              const centerDistance = Math.sqrt(
+                Math.pow(gridPosition.x - 1.5, 2) + 
+                Math.pow(gridPosition.z - 1.5, 2)
+              );
+              
+              // Activate based on distance bands
+              const activeBand = Math.floor(time * 0.5) % 3;
+              if (Math.floor(centerDistance) === activeBand) {
+                beam.intensity = 15;
+                beam.color.setHex(scheme.secondary);
+              } else {
+                beam.intensity = 0;
+              }
+            }
+            else if (patternType === 2) {
+              // X pattern
+              if (gridPosition.x === gridPosition.z || 
+                  gridPosition.x === (3 - gridPosition.z)) {
+                beam.intensity = 15;
+                beam.color.setHex(scheme.accent);
+              } else {
+                beam.intensity = 0;
+              }
+            }
+            else {
+              // Outer ring only
+              if (gridPosition.x === 0 || gridPosition.x === 3 || 
+                  gridPosition.z === 0 || gridPosition.z === 3) {
+                beam.intensity = 15;
+                beam.color.setHex(scheme.primary);
+              } else {
+                beam.intensity = 0;
+              }
+            }
+            
+            // All active beams point straight down
+            beam.target.position.set(
+              pencil.basePosition.x,
+              0,
+              pencil.basePosition.z
+            );
+            break;
+            
+          case 3: // Swarm/fluid movement
+            // All beams active, moving in fluid patterns
+            beam.intensity = 15;
+            
+            // Each beam with slightly different timing
+            const swarmOffsetX = Math.sin(time * 0.5 + index * 0.2) * 15;
+            const swarmOffsetZ = Math.cos(time * 0.3 + index * 0.2) * 15;
+            
+            // Target position with fluid movement
+            beam.target.position.set(
+              swarmOffsetX,
+              0,
+              swarmOffsetZ
+            );
+            
+            // Color changes in fluid motion
+            const colorMix = (Math.sin(time * 0.2 + index * 0.1) + 1) / 2;
+            if (colorMix < 0.33) {
+              beam.color.setHex(scheme.primary);
+            } else if (colorMix < 0.66) {
+              beam.color.setHex(scheme.secondary);
+            } else {
+              beam.color.setHex(scheme.accent);
+            }
+            break;
+            
+          case 4: // Grid wave patterns
+            // Wave patterns moving across grid
+            const waveX = (time * 1.5 + gridPosition.x * 0.25) % 4;
+            const waveZ = (time * 1.0 + gridPosition.z * 0.25) % 4;
+            
+            // X wave
+            const xWaveDistance = Math.min(Math.abs(waveX - gridPosition.z), Math.abs(waveX - gridPosition.z + 4), Math.abs(waveX - gridPosition.z - 4));
+            
+            // Z wave
+            const zWaveDistance = Math.min(Math.abs(waveZ - gridPosition.x), Math.abs(waveZ - gridPosition.x + 4), Math.abs(waveZ - gridPosition.x - 4));
+            
+            // Combined wave effect
+            const minDistance = Math.min(xWaveDistance, zWaveDistance);
+            
+            if (minDistance < 0.5) {
+              beam.intensity = 15 * (1 - minDistance / 0.5);
+              beam.color.setHex(minDistance === xWaveDistance ? scheme.primary : scheme.secondary);
+              
+              // Wave movement in target
+              const waveTargetX = pencil.basePosition.x + Math.sin(time * 2 + pencil.phase * 3) * 10;
+              const waveTargetZ = pencil.basePosition.z + Math.cos(time * 1.5 + pencil.phase * 3) * 10;
+              
+              beam.target.position.set(waveTargetX, 0, waveTargetZ);
+            } else {
+              beam.intensity = 0;
+            }
+            break;
+            
+          case 5: // Random sharp flashes
+            // Random staccato flashes
+            if (Math.random() < 0.02) { // 2% chance per frame per beam
+              beam.intensity = 25; // Extra bright
+              beam.color.setHex(scheme.accent);
+              
+              // Random target
+              beam.target.position.set(
+                (Math.random() - 0.5) * 30,
+                0,
+                (Math.random() - 0.5) * 30
+              );
+              
+              // Auto turn off after short duration
+              setTimeout(() => {
+                beam.intensity = 0;
+              }, 100 + Math.random() * 150);
+            }
+            break;
+            
+          case 6: // Coordinated sweeps
+            // Coordinated sweeping motion
+            const angle = time * 0.5;
+            const radius = 20;
+            
+            // Calculate sweep position
+            const sweepX = Math.cos(angle) * radius;
+            const sweepZ = Math.sin(angle) * radius;
+            
+            // Focus all beams on same spot
+            beam.target.position.set(sweepX, 0, sweepZ);
+            
+            // Every other beam for alternating effect
+            if ((gridPosition.x + gridPosition.z) % 2 === Math.floor(time) % 2) {
+              beam.intensity = 15;
+              beam.color.setHex(scheme.primary);
+            } else {
+              beam.intensity = 0;
+            }
+            break;
+            
+          case 7: // Build up motion
+            const pencilBuildupProgress = Math.min(1, sequenceTime / 16);
+            
+            // Gradually activate more beams as buildup progresses
+            const activationOrder = pencil.gridX * 4 + pencil.gridZ;
+            const normalizedOrder = activationOrder / 15; // 0 to 1
+            
+            if (normalizedOrder < pencilBuildupProgress) {
+              // This beam is active in current build stage
+              beam.intensity = 15;
+              
+              // Faster movement as build progresses
+              const buildSpeed = 0.5 + 5 * pencilBuildupProgress;
+              const buildRadius = 5 + 25 * pencilBuildupProgress;
+              
+              // Circular movement that gets wider and faster
+              const buildX = Math.cos(time * buildSpeed + pencil.phase * 2) * buildRadius;
+              const buildZ = Math.sin(time * buildSpeed + pencil.phase * 2) * buildRadius;
+              
+              beam.target.position.set(buildX, 0, buildZ);
+              
+              // Color cycles faster as build progresses
+              const colorCycleRate = 0.2 + 2 * pencilBuildupProgress;
+              const colorPos = (time * colorCycleRate + pencil.phase) % 3;
+              
+              if (colorPos < 1) {
+                beam.color.setHex(scheme.primary);
+              } else if (colorPos < 2) {
+                beam.color.setHex(scheme.secondary);
+              } else {
+                beam.color.setHex(scheme.accent);
+              }
+              
+              // Final crescendo
+              if (sequenceTime > 15) {
+                beam.intensity = 25; // Extra bright
+                
+                // Rapid, chaotic movement
+                beam.target.position.set(
+                  Math.sin(time * 20 + index) * 30,
+                  0,
+                  Math.cos(time * 18 + index) * 30
+                );
+              }
+            } else {
+              beam.intensity = 0;
+            }
+            break;
+        }
+      });
+    }
+    
+    function animateAtmosphere(time, beat, fraction) {
+      const scheme = colorSchemes[currentColorScheme];
+      
+      // Adjust fog density based on sequence
+      switch(currentSequence) {
+        case 0:
+          scene.fog.density = 0.01;
+          scene.fog.color.set(0x000000);
+          break;
+          
+        case 1:
+          // Pulse fog on beats
+          if (beat % 4 === 0 && fraction < 0.2) {
+            scene.fog.density = 0.03;
+            scene.fog.color.setHex(scheme.primary);
+          } else {
+            scene.fog.density = 0.01;
+            scene.fog.color.set(0x000000);
+          }
+          break;
+          
+        case 2:
+          // Gentle color shifting
+          scene.fog.density = 0.015;
+          
+          const fogHue = (time * 0.05) % 1;
+          scene.fog.color.setHSL(fogHue, 0.5, 0.1);
+          break;
+          
+        case 3:
+          // More dense, pulsing
+          const pulseFog = 0.01 + 0.01 * Math.sin(time * 0.5);
+          scene.fog.density = pulseFog;
+          scene.fog.color.set(0x000000);
+          break;
+          
+        case 4:
+          // Light colored fog
+          scene.fog.density = 0.02;
+          scene.fog.color.setHex(scheme.secondary);
+          scene.fog.color.multiplyScalar(0.1); // Dim it
+          break;
+          
+        case 5:
+          // Sharp changes
+          if (beat % 8 === 0 && fraction < 0.1) {
+            scene.fog.density = 0.04;
+            scene.fog.color.setHex(scheme.accent);
+          } else {
+            scene.fog.density = 0.01;
+            scene.fog.color.set(0x000000);
+          }
+          break;
+          
+        case 6:
+          // Minimal fog
+          scene.fog.density = 0.005;
+          scene.fog.color.set(0x000000);
+          break;
+          
+        case 7:
+          // Build up
+          const fogBuildupProgress = Math.min(1, sequenceTime / 16);
+          
+          // Increasing fog with color shifts
+          scene.fog.density = 0.01 + 0.03 * fogBuildupProgress;
+          
+          // Color pulses get faster
+          const fogPulseSpeed = 0.1 + 2 * fogBuildupProgress;
+          const fogPulse = (Math.sin(time * fogPulseSpeed) + 1) / 2;
+          
+          // Mix between colors based on pulse
+          if (fogPulse < 0.33) {
+            scene.fog.color.setHex(scheme.primary);
+          } else if (fogPulse < 0.66) {
+            scene.fog.color.setHex(scheme.secondary);
+          } else {
+            scene.fog.color.setHex(scheme.accent);
+          }
+          
+          // Dim the color
+          scene.fog.color.multiplyScalar(0.15);
+          break;
+      }
+      
+      // Animate haze particles
+      if (haze) {
+        const positions = haze.geometry.attributes.position.array;
+        const particleCount = positions.length / 3;
+        
+        for (let i = 0; i < particleCount; i++) {
+          const i3 = i * 3;
+          
+          // Subtle movement based on sine waves
+          positions[i3] += Math.sin(time * 0.1 + i * 0.01) * 0.01;
+          positions[i3 + 1] += Math.cos(time * 0.05 + i * 0.01) * 0.005;
+          positions[i3 + 2] += Math.sin(time * 0.08 + i * 0.01) * 0.01;
+          
+          // Keep particles within bounds
+          if (Math.abs(positions[i3]) > 30) positions[i3] *= 0.95;
+          if (positions[i3 + 1] < 0 || positions[i3 + 1] > 25) positions[i3 + 1] *= 0.95;
+          if (Math.abs(positions[i3 + 2]) > 20) positions[i3 + 2] *= 0.95;
+        }
+        
+        haze.geometry.attributes.position.needsUpdate = true;
+        
+        // Adjust haze opacity based on sequence
+        haze.material.opacity = 0.1 + 0.1 * scene.fog.density;
+      }
+    }
+    
+    // Main animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Update time tracking
+      const time = clock.getElapsedTime() + timeOffset;
+      sequenceTime += clock.getDelta();
+      
+      // Beat detection
+      const currentBeat = getCurrentBeat(time);
+      beatTime = time % beatDuration;
+      const beatFraction = beatTime / beatDuration;
+      
+      // Check for sequence change
+      if (sequenceTime > 16) { // 16 seconds per sequence
+        nextSequence();
+      }
+      
+      // Animate all lighting elements
+      animateMainLights(time, currentBeat, beatFraction);
+      animateBeamLights(time, currentBeat, beatFraction);
+      animatePencilBeams(time, currentBeat, beatFraction); // Animate new pencil beams
+      animateLasers(time, currentBeat, beatFraction);
+      animateLEDPanels(time, currentBeat, beatFraction);
+      animateLightBars(time, currentBeat, beatFraction);
+      animateBlinders(time, currentBeat, beatFraction);
+      
+      // Animate camera
+      animateCamera(time, currentBeat, beatFraction);
+      
+      // Animate atmosphere
+      animateAtmosphere(time, currentBeat, beatFraction);
+      
+      // Render the scene
+      renderer.render(scene, camera);
+    }
+    
+    // Initialize the scene
+    init();
+  </script>
+</body>
+</html>
