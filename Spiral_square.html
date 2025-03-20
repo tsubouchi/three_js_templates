@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Spiral Squares Animation</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #controlPanel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      z-index: 100;
+      width: 250px;
+    }
+    .control-group {
+      margin-bottom: 15px;
+    }
+    .control-group h3 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+    input[type="range"] {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 14px;
+      margin: 4px 2px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .button-group {
+      display: flex;
+      justify-content: space-between;
+    }
+    select {
+      width: 100%;
+      padding: 5px;
+      margin-bottom: 10px;
+      background-color: #333;
+      color: white;
+      border: 1px solid #555;
+    }
+    #toggleControls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 101;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <button id="toggleControls">Show Controls</button>
+  <div id="controlPanel" class="hidden">
+    <div class="control-group">
+      <h3>Camera Controls</h3>
+      <label>View Type:</label>
+      <select id="viewType">
+        <option value="orthographic">Orthographic (2D-like)</option>
+        <option value="perspective">Perspective (3D)</option>
+      </select>
+      
+      <label>Zoom: <span id="zoomValue">1.0</span></label>
+      <input type="range" id="zoom" min="0.1" max="3" step="0.1" value="1.0">
+      
+      <div id="perspective-controls" class="hidden">
+        <label>Camera Position X: <span id="cameraPosXValue">0</span></label>
+        <input type="range" id="cameraPosX" min="-500" max="500" step="10" value="0">
+        
+        <label>Camera Position Y: <span id="cameraPosYValue">0</span></label>
+        <input type="range" id="cameraPosY" min="-500" max="500" step="10" value="0">
+        
+        <label>Camera Position Z: <span id="cameraPosZValue">500</span></label>
+        <input type="range" id="cameraPosZ" min="100" max="1000" step="10" value="500">
+      </div>
+      
+      <div class="button-group">
+        <button id="resetCamera">Reset Camera</button>
+        <button id="randomCamera">Random View</button>
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <h3>Animation Controls</h3>
+      <label>Animation Speed: <span id="speedValue">1.0</span></label>
+      <input type="range" id="speed" min="0.1" max="3.0" step="0.1" value="1.0">
+      
+      <label>Number of Squares: <span id="squaresValue">150</span></label>
+      <input type="range" id="squares" min="50" max="300" step="10" value="150">
+      
+      <label>Square Size: <span id="sizeValue">1.0</span></label>
+      <input type="range" id="size" min="0.1" max="2.0" step="0.1" value="1.0">
+      
+      <label>Corner Radius: <span id="radiusValue">10</span></label>
+      <input type="range" id="radius" min="0" max="30" step="1" value="10">
+    </div>
+    
+    <div class="control-group">
+      <h3>Color Controls</h3>
+      <label>Square Color:</label>
+      <input type="color" id="squareColor" value="#ffffff">
+      
+      <label>Background Color:</label>
+      <input type="color" id="bgColor" value="#000000">
+    </div>
+  </div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // Setup initial constants
+    const initialConfig = {
+      n: 4,
+      b: 150, // Number of squares
+      speed: 1.0,
+      size: 1.0,
+      cornerRadius: 10,
+      squareColor: 0xffffff,
+      bgColor: 0x000000,
+      viewType: 'orthographic',
+      zoom: 1.0
+    };
+    
+    // Create a copy of the initial config for the current state
+    const config = { ...initialConfig };
+    let f = 0; // Frame counter
+    
+    // DOM Elements
+    const toggleControlsBtn = document.getElementById('toggleControls');
+    const controlPanel = document.getElementById('controlPanel');
+    const viewTypeSelect = document.getElementById('viewType');
+    const zoomSlider = document.getElementById('zoom');
+    const zoomValue = document.getElementById('zoomValue');
+    const perspectiveControls = document.getElementById('perspective-controls');
+    const cameraPosXSlider = document.getElementById('cameraPosX');
+    const cameraPosYSlider = document.getElementById('cameraPosY');
+    const cameraPosZSlider = document.getElementById('cameraPosZ');
+    const cameraPosXValue = document.getElementById('cameraPosXValue');
+    const cameraPosYValue = document.getElementById('cameraPosYValue');
+    const cameraPosZValue = document.getElementById('cameraPosZValue');
+    const resetCameraBtn = document.getElementById('resetCamera');
+    const randomCameraBtn = document.getElementById('randomCamera');
+    const speedSlider = document.getElementById('speed');
+    const speedValue = document.getElementById('speedValue');
+    const squaresSlider = document.getElementById('squares');
+    const squaresValue = document.getElementById('squaresValue');
+    const sizeSlider = document.getElementById('size');
+    const sizeValue = document.getElementById('sizeValue');
+    const radiusSlider = document.getElementById('radius');
+    const radiusValue = document.getElementById('radiusValue');
+    const squareColorPicker = document.getElementById('squareColor');
+    const bgColorPicker = document.getElementById('bgColor');
+    
+    // Setup Three.js scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(config.bgColor);
+    
+    // Use a tall aspect ratio for vertical short-style video (9:16)
+    const aspectRatio = 9/16;
+    const width = window.innerWidth;
+    const height = window.innerWidth / aspectRatio;
+    
+    // Setup cameras
+    let orthoCamera, perspCamera, activeCamera;
+    
+    // Orthographic camera for 2D-like effect
+    orthoCamera = new THREE.OrthographicCamera(
+      -width/2, width/2, height/2, -height/2, 1, 2000
+    );
+    orthoCamera.position.z = 500;
+    
+    // Perspective camera for 3D effect
+    perspCamera = new THREE.PerspectiveCamera(
+      75, width/height, 0.1, 2000
+    );
+    perspCamera.position.z = 500;
+    
+    // Set initial active camera
+    activeCamera = orthoCamera;
+    
+    // Setup renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    document.body.appendChild(renderer.domElement);
+    
+    // Create a group to hold all squares for easy manipulation
+    const squaresGroup = new THREE.Group();
+    scene.add(squaresGroup);
+    
+    // Array to store all square meshes
+    let squares = [];
+    createSquares();
+    
+    // Function to create all square meshes
+    function createSquares() {
+      // Clear existing squares
+      squares.forEach(square => squaresGroup.remove(square));
+      squares = [];
+      
+      // Create new squares
+      for (let i = 0; i < config.b; i++) {
+        // Create a rounded rectangle using a custom shape
+        const roundedRectShape = createRoundedRectShape(10, 10, config.cornerRadius);
+        
+        // Create edges from the shape
+        const geometry = new THREE.EdgesGeometry(
+          new THREE.ShapeGeometry(roundedRectShape)
+        );
+        
+        // Create line material
+        const material = new THREE.LineBasicMaterial({ 
+          color: config.squareColor,
+          linewidth: 2 // Note: linewidth > 1 may not work on all devices due to WebGL limitations
+        });
+        
+        // Create the square mesh
+        const square = new THREE.LineSegments(geometry, material);
+        square.rotation.z = Math.PI / 5; // Initial rotation
+        
+        // Add to scene and store reference
+        squaresGroup.add(square);
+        squares.push(square);
+      }
+    }
+    
+    // Function to create a rounded rectangle shape
+    function createRoundedRectShape(width, height, radius) {
+      const shape = new THREE.Shape();
+      const x = -width / 2;
+      const y = -height / 2;
+      
+      shape.moveTo(x + radius, y);
+      shape.lineTo(x + width - radius, y);
+      shape.quadraticCurveTo(x + width, y, x + width, y + radius);
+      shape.lineTo(x + width, y + height - radius);
+      shape.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      shape.lineTo(x + radius, y + height);
+      shape.quadraticCurveTo(x, y + height, x, y + height - radius);
+      shape.lineTo(x, y + radius);
+      shape.quadraticCurveTo(x, y, x + radius, y);
+      
+      return shape;
+    }
+    
+    // Animation loop
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Update the frame counter based on speed
+      f += config.speed;
+      
+      // Calculate the fractional time value (t) as in the original code
+      const t = (f / config.n) % 1;
+      
+      // Update each square based on its index
+      squares.forEach((square, i) => {
+        const a = (i - t) / config.b;
+        
+        // Apply scaling based on the position in the sequence
+        const baseSize = width / 4;
+        const r = baseSize / a / config.n * 0.1 * config.size;
+        
+        // Avoid division by zero or negative values
+        if (a > 0) {
+          square.scale.set(r, r, 1);
+          
+          // Add rotation similar to the original
+          square.rotation.z = Math.PI / 5 + a * Math.PI * 2 * 2;
+        } else {
+          // Hide squares with invalid scaling
+          square.visible = false;
+        }
+      });
+      
+      // Render the scene with active camera
+      renderer.render(scene, activeCamera);
+    }
+    
+    // Apply zoom to cameras
+    function updateZoom(zoomLevel) {
+      // Update orthographic camera
+      orthoCamera.left = -width/2 / zoomLevel;
+      orthoCamera.right = width/2 / zoomLevel;
+      orthoCamera.top = height/2 / zoomLevel;
+      orthoCamera.bottom = -height/2 / zoomLevel;
+      orthoCamera.updateProjectionMatrix();
+      
+      // Update perspective camera (via FOV)
+      const baseFOV = 75;
+      perspCamera.fov = baseFOV / zoomLevel;
+      perspCamera.updateProjectionMatrix();
+    }
+    
+    // Reset camera to default position
+    function resetCameraPosition() {
+      // Reset orthographic camera
+      orthoCamera.position.set(0, 0, 500);
+      orthoCamera.rotation.set(0, 0, 0);
+      orthoCamera.updateProjectionMatrix();
+      
+      // Reset perspective camera
+      perspCamera.position.set(0, 0, 500);
+      perspCamera.rotation.set(0, 0, 0);
+      perspCamera.updateProjectionMatrix();
+      
+      // Reset UI elements
+      zoomSlider.value = 1.0;
+      zoomValue.textContent = "1.0";
+      
+      cameraPosXSlider.value = 0;
+      cameraPosYSlider.value = 0;
+      cameraPosZSlider.value = 500;
+      
+      cameraPosXValue.textContent = "0";
+      cameraPosYValue.textContent = "0";
+      cameraPosZValue.textContent = "500";
+      
+      config.zoom = 1.0;
+      updateZoom(config.zoom);
+    }
+    
+    // Set random camera position and rotation
+    function setRandomCamera() {
+      const randomX = Math.floor(Math.random() * 1000 - 500);
+      const randomY = Math.floor(Math.random() * 1000 - 500);
+      const randomZ = Math.floor(Math.random() * 900 + 100);
+      
+      activeCamera.position.set(randomX, randomY, randomZ);
+      
+      // Random but subtle rotation
+      const rotX = (Math.random() - 0.5) * 0.5;
+      const rotY = (Math.random() - 0.5) * 0.5;
+      activeCamera.rotation.set(rotX, rotY, 0);
+      
+      // Update UI sliders
+      cameraPosXSlider.value = randomX;
+      cameraPosYSlider.value = randomY;
+      cameraPosZSlider.value = randomZ;
+      
+      cameraPosXValue.textContent = randomX;
+      cameraPosYValue.textContent = randomY;
+      cameraPosZValue.textContent = randomZ;
+      
+      activeCamera.updateProjectionMatrix();
+    }
+    
+    // Event Listeners
+    toggleControlsBtn.addEventListener('click', () => {
+      controlPanel.classList.toggle('hidden');
+      toggleControlsBtn.textContent = controlPanel.classList.contains('hidden') ? 
+        'Show Controls' : 'Hide Controls';
+    });
+    
+    viewTypeSelect.addEventListener('change', (e) => {
+      config.viewType = e.target.value;
+      
+      if (config.viewType === 'perspective') {
+        activeCamera = perspCamera;
+        perspectiveControls.classList.remove('hidden');
+      } else {
+        activeCamera = orthoCamera;
+        perspectiveControls.classList.add('hidden');
+      }
+      
+      // Apply current zoom to the new active camera
+      updateZoom(config.zoom);
+    });
+    
+    zoomSlider.addEventListener('input', (e) => {
+      config.zoom = parseFloat(e.target.value);
+      zoomValue.textContent = config.zoom.toFixed(1);
+      updateZoom(config.zoom);
+    });
+    
+    cameraPosXSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      cameraPosXValue.textContent = value;
+      activeCamera.position.x = value;
+    });
+    
+    cameraPosYSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      cameraPosYValue.textContent = value;
+      activeCamera.position.y = value;
+    });
+    
+    cameraPosZSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      cameraPosZValue.textContent = value;
+      activeCamera.position.z = value;
+    });
+    
+    resetCameraBtn.addEventListener('click', resetCameraPosition);
+    randomCameraBtn.addEventListener('click', setRandomCamera);
+    
+    speedSlider.addEventListener('input', (e) => {
+      config.speed = parseFloat(e.target.value);
+      speedValue.textContent = config.speed.toFixed(1);
+    });
+    
+    squaresSlider.addEventListener('input', (e) => {
+      config.b = parseInt(e.target.value);
+      squaresValue.textContent = config.b;
+      createSquares();
+    });
+    
+    sizeSlider.addEventListener('input', (e) => {
+      config.size = parseFloat(e.target.value);
+      sizeValue.textContent = config.size.toFixed(1);
+    });
+    
+    radiusSlider.addEventListener('input', (e) => {
+      config.cornerRadius = parseInt(e.target.value);
+      radiusValue.textContent = config.cornerRadius;
+      createSquares();
+    });
+    
+    squareColorPicker.addEventListener('input', (e) => {
+      const color = new THREE.Color(e.target.value);
+      config.squareColor = color.getHex();
+      
+      // Update all square materials
+      squares.forEach(square => {
+        square.material.color.set(config.squareColor);
+      });
+    });
+    
+    bgColorPicker.addEventListener('input', (e) => {
+      const color = new THREE.Color(e.target.value);
+      config.bgColor = color.getHex();
+      scene.background.set(config.bgColor);
+    });
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      const newWidth = window.innerWidth;
+      const newHeight = window.innerWidth / aspectRatio;
+      
+      // Update orthographic camera
+      orthoCamera.left = -newWidth / (2 * config.zoom);
+      orthoCamera.right = newWidth / (2 * config.zoom);
+      orthoCamera.top = newHeight / (2 * config.zoom);
+      orthoCamera.bottom = -newHeight / (2 * config.zoom);
+      orthoCamera.updateProjectionMatrix();
+      
+      // Update perspective camera
+      perspCamera.aspect = newWidth / newHeight;
+      perspCamera.updateProjectionMatrix();
+      
+      // Update renderer
+      renderer.setSize(newWidth, newHeight);
+    });
+    
+    // Initialize with default settings
+    resetCameraPosition();
+    
+    // Start animation
+    animate();
+  </script>
+</body>
+</html>
