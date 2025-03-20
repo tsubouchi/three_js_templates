@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genuary 10 - Only use TAU</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+        }
+        
+        #control-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 0 0 0 10px;
+            transition: transform 0.3s ease;
+            z-index: 100;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        
+        #control-panel.hidden {
+            transform: translateX(100%);
+        }
+        
+        #toggle-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            cursor: pointer;
+            z-index: 101;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        select, input {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        
+        button {
+            background-color: #4a4a8a;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background-color: #5a5aa0;
+        }
+    </style>
+</head>
+<body>
+    <!-- コントロールパネル切り替えボタン -->
+    <button id="toggle-panel">≡</button>
+    
+    <!-- コントロールパネル -->
+    <div id="control-panel">
+        <h2>設定パネル</h2>
+        
+        <div class="control-group">
+            <div class="control-title">形状</div>
+            <select id="shape-select">
+                <option value="circle">円</option>
+                <option value="heart">ハート</option>
+                <option value="star">星</option>
+                <option value="square">四角</option>
+                <option value="triangle">三角</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-title">サイズ倍率</div>
+            <input type="range" id="size-factor" min="0.1" max="3" step="0.1" value="1">
+            <span id="size-value">1.0</span>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-title">回転速度</div>
+            <input type="range" id="speed-factor" min="0.1" max="3" step="0.1" value="1">
+            <span id="speed-value">1.0</span>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-title">カラーモード</div>
+            <select id="color-mode">
+                <option value="rainbow">レインボー</option>
+                <option value="monochrome">モノクローム</option>
+                <option value="warm">暖色系</option>
+                <option value="cool">寒色系</option>
+                <option value="custom">カスタムカラー</option>
+            </select>
+            <div id="color-picker-container" style="margin-top: 8px; display: none;">
+                <input type="color" id="custom-color" value="#ff3366">
+                <span style="margin-left: 5px;">カスタムカラー</span>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <div class="control-title">軌道タイプ</div>
+            <select id="path-type">
+                <option value="spiral">スパイラル</option>
+                <option value="circular">円形</option>
+                <option value="wave">波形</option>
+                <option value="random">ランダム通過</option>
+            </select>
+        </div>
+        
+        <button id="reset-button">設定をリセット</button>
+        <button id="clear-button">画面をクリア</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // UIコントロール
+        const controlPanel = document.getElementById('control-panel');
+        const toggleButton = document.getElementById('toggle-panel');
+        const shapeSelect = document.getElementById('shape-select');
+        const sizeFactor = document.getElementById('size-factor');
+        const sizeValue = document.getElementById('size-value');
+        const speedFactor = document.getElementById('speed-factor');
+        const speedValue = document.getElementById('speed-value');
+        const colorMode = document.getElementById('color-mode');
+        const colorPickerContainer = document.getElementById('color-picker-container');
+        const customColor = document.getElementById('custom-color');
+        const pathType = document.getElementById('path-type');
+        const resetButton = document.getElementById('reset-button');
+        const clearButton = document.getElementById('clear-button');
+        
+        // パネル表示/非表示の切り替え
+        toggleButton.addEventListener('click', () => {
+            controlPanel.classList.toggle('hidden');
+        });
+        
+        // 値の表示更新
+        sizeFactor.addEventListener('input', () => {
+            sizeValue.textContent = sizeFactor.value;
+        });
+        
+        speedFactor.addEventListener('input', () => {
+            speedValue.textContent = speedFactor.value;
+        });
+        
+        // カラーモード変更時の処理
+        colorMode.addEventListener('change', () => {
+            // カスタムカラーが選択された場合はカラーピッカーを表示
+            if (colorMode.value === 'custom') {
+                colorPickerContainer.style.display = 'block';
+            } else {
+                colorPickerContainer.style.display = 'none';
+            }
+        });
+        
+        // TAU = 2π
+        const TAU = Math.PI * 2;
+        const L = Math.log;
+        
+        // キャンバスサイズの計算
+        const w = (TAU * TAU * TAU) * L(TAU);
+        
+        // r, t 変数の初期値を設定
+        let r = TAU;
+        let t = L(r);
+        
+        // v 値の計算
+        const v = w / Math.ceil(t);
+        
+        // Three.jsの設定
+        const scene = new THREE.Scene();
+        
+        // アスペクト比を9:16の縦長に設定
+        const aspect = 9/16;
+        const camera = new THREE.OrthographicCamera(
+            -w/2, w/2, 
+            w/aspect/2, -w/aspect/2, 
+            0.1, 1000
+        );
+        camera.position.z = 10;
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        // 背景色を設定
+        scene.background = new THREE.Color(t);
+        
+        // 形状を作成する関数
+        function createShape(x, y, radius, hue) {
+            const shape = shapeSelect.value;
+            let geometry;
+            
+            switch(shape) {
+                case 'circle':
+                    geometry = new THREE.CircleGeometry(radius, 32);
+                    break;
+                case 'heart':
+                    geometry = createHeartShape(radius);
+                    break;
+                case 'star':
+                    geometry = createStarShape(radius);
+                    break;
+                case 'square':
+                    geometry = new THREE.PlaneGeometry(radius * 2, radius * 2);
+                    break;
+                case 'triangle':
+                    geometry = new THREE.CircleGeometry(radius, 3);
+                    break;
+                default:
+                    geometry = new THREE.CircleGeometry(radius, 32);
+            }
+            
+            // カラーモードに応じて色を設定
+            const color = getColor(hue);
+            
+            const material = new THREE.MeshBasicMaterial({ 
+                color: color,
+                side: THREE.DoubleSide
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, 0);
+            
+            // 星と三角形は回転を調整
+            if (shape === 'star' || shape === 'triangle') {
+                mesh.rotation.z = Math.PI;
+            }
+            
+            return mesh;
+        }
+        
+        // ハートの形状を作成（より美しいハート形状）
+        function createHeartShape(radius) {
+            const shape = new THREE.Shape();
+            const x = 0, y = 0;
+            
+            // ハートのトップ部分（より丸みを持たせる）
+            shape.moveTo(x, y + radius * 0.25);
+            
+            // 右側の曲線（上部）
+            shape.bezierCurveTo(
+                x, y + radius * 0.9,
+                x + radius * 0.8, y + radius * 0.9,
+                x + radius * 0.8, y + radius * 0.4
+            );
+            
+            // 右側の曲線（下部）
+            shape.bezierCurveTo(
+                x + radius * 0.8, y - radius * 0.2,
+                x + radius * 0.35, y - radius * 0.6,
+                x, y - radius * 0.75
+            );
+            
+            // 左側の曲線（下部）
+            shape.bezierCurveTo(
+                x - radius * 0.35, y - radius * 0.6,
+                x - radius * 0.8, y - radius * 0.2,
+                x - radius * 0.8, y + radius * 0.4
+            );
+            
+            // 左側の曲線（上部）
+            shape.bezierCurveTo(
+                x - radius * 0.8, y + radius * 0.9,
+                x, y + radius * 0.9,
+                x, y + radius * 0.25
+            );
+            
+            return new THREE.ShapeGeometry(shape);
+        }
+        
+        // 星の形状を作成
+        function createStarShape(radius) {
+            const shape = new THREE.Shape();
+            const points = 5;
+            const innerRadius = radius * 0.4;
+            const outerRadius = radius;
+            
+            for (let i = 0; i < points * 2; i++) {
+                const r = (i % 2 === 0) ? outerRadius : innerRadius;
+                const angle = (i / (points * 2)) * TAU + Math.PI/2;
+                const x = Math.cos(angle) * r;
+                const y = Math.sin(angle) * r;
+                
+                if (i === 0) {
+                    shape.moveTo(x, y);
+                } else {
+                    shape.lineTo(x, y);
+                }
+            }
+            
+            shape.closePath();
+            return new THREE.ShapeGeometry(shape);
+        }
+        
+        // カラーモードに応じた色を取得
+        function getColor(hue) {
+            const mode = colorMode.value;
+            const color = new THREE.Color();
+            
+            switch(mode) {
+                case 'rainbow':
+                    color.setHSL(hue / 360, 1.0, 0.5);
+                    break;
+                case 'monochrome':
+                    color.setHSL(0.6, 0.1, hue / 360);
+                    break;
+                case 'warm':
+                    color.setHSL((hue % 60 + 0) / 360, 0.8, 0.6);
+                    break;
+                case 'cool':
+                    color.setHSL((hue % 60 + 180) / 360, 0.8, 0.6);
+                    break;
+                case 'custom':
+                    // カスタムカラーの場合はカラーピッカーから色を取得
+                    const customColorHex = document.getElementById('custom-color').value;
+                    color.set(customColorHex);
+                    break;
+                default:
+                    color.setHSL(hue / 360, 1.0, 0.5);
+            }
+            
+            return color;
+        }
+        
+        // ランダム通過用の変数
+        let randomStart = { x: 0, y: 0 };
+        let randomEnd = { x: 0, y: 0 };
+        let randomProgress = 0;
+        
+        // 新しいランダム点を生成
+        function generateRandomPoints() {
+            const margin = w * 0.2;  // 画面から少し余裕を持たせる
+            
+            // 開始点と終了点の位置を決める
+            // ランダムな辺から開始して対角の辺に終了点を設定
+            const side = Math.floor(Math.random() * 4);  // 0:上, 1:右, 2:下, 3:左
+            
+            switch(side) {
+                case 0:  // 上から開始
+                    randomStart.x = Math.random() * w - w/2;
+                    randomStart.y = w/aspect/2 + margin;
+                    randomEnd.x = Math.random() * w - w/2;
+                    randomEnd.y = -w/aspect/2 - margin;
+                    break;
+                case 1:  // 右から開始
+                    randomStart.x = w/2 + margin;
+                    randomStart.y = Math.random() * w/aspect - w/aspect/2;
+                    randomEnd.x = -w/2 - margin;
+                    randomEnd.y = Math.random() * w/aspect - w/aspect/2;
+                    break;
+                case 2:  // 下から開始
+                    randomStart.x = Math.random() * w - w/2;
+                    randomStart.y = -w/aspect/2 - margin;
+                    randomEnd.x = Math.random() * w - w/2;
+                    randomEnd.y = w/aspect/2 + margin;
+                    break;
+                case 3:  // 左から開始
+                    randomStart.x = -w/2 - margin;
+                    randomStart.y = Math.random() * w/aspect - w/aspect/2;
+                    randomEnd.x = w/2 + margin;
+                    randomEnd.y = Math.random() * w/aspect - w/aspect/2;
+                    break;
+            }
+            
+            randomProgress = 0;
+        }
+        
+        // 初期のランダム点設定
+        generateRandomPoints();
+        
+        // 軌道タイプに応じた位置を計算
+        function calculatePosition(t, r) {
+            const path = pathType.value;
+            let x, y;
+            
+            switch(path) {
+                case 'spiral':
+                    x = v + r * Math.cos(t);
+                    y = v + r * Math.sin(t);
+                    break;
+                case 'circular':
+                    x = v + TAU * Math.cos(t);
+                    y = v + TAU * Math.sin(t);
+                    break;
+                case 'wave':
+                    x = v + t * r/TAU;
+                    y = v + r * Math.sin(t);
+                    
+                    // 画面外に出たらリターンする処理
+                    const maxX = w/2 + v;
+                    const minX = -w/2 + v;
+                    if (x > maxX) {
+                        x = minX + (x - maxX);
+                    } else if (x < minX) {
+                        x = maxX - (minX - x);
+                    }
+                    break;
+                case 'random':
+                    // ランダムな2点間を直線的に移動
+                    randomProgress += 0.01 * parseFloat(speedFactor.value);
+                    
+                    if (randomProgress >= 1) {
+                        generateRandomPoints();
+                    }
+                    
+                    // 線形補間で位置を計算
+                    x = randomStart.x + (randomEnd.x - randomStart.x) * randomProgress;
+                    y = randomStart.y + (randomEnd.y - randomStart.y) * randomProgress;
+                    return { x, y };  // この場合はw/2などを引く必要がない
+                default:
+                    x = v + r * Math.cos(t);
+                    y = v + r * Math.sin(t);
+            }
+            
+            return { x, y };
+        }
+        
+        // アニメーションループ
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 速度係数を適用
+            const speedVal = parseFloat(speedFactor.value);
+            
+            // t値を更新
+            t += L(TAU) * speedVal;
+            
+            // 新しい位置を計算
+            const position = calculatePosition(t, r);
+            const x = position.x;
+            const y = position.y;
+            
+            // 形状のサイズ調整
+            const sizeVal = parseFloat(sizeFactor.value);
+            const radius = (r / TAU) * sizeVal;
+            
+            // 円を作成し、シーンに追加
+            const hue = (t % TAU) * (360 / TAU); // 度数に変換
+            const shape = createShape(x - w/2, y - w/aspect/2, radius, hue);
+            scene.add(shape);
+            
+            // r値を更新
+            r += L(L(TAU)) * speedVal;
+            
+            // レンダリング
+            renderer.render(scene, camera);
+        }
+        
+        // リサイズハンドラ
+        window.addEventListener('resize', () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            camera.left = -w/2;
+            camera.right = w/2;
+            camera.top = w/aspect/2;
+            camera.bottom = -w/aspect/2;
+            camera.updateProjectionMatrix();
+            
+            renderer.setSize(width, height);
+        });
+        
+        // 設定をリセット
+        resetButton.addEventListener('click', () => {
+            shapeSelect.value = 'circle';
+            sizeFactor.value = 1;
+            sizeValue.textContent = '1.0';
+            speedFactor.value = 1;
+            speedValue.textContent = '1.0';
+            colorMode.value = 'rainbow';
+            colorPickerContainer.style.display = 'none';
+            customColor.value = '#ff3366';
+            pathType.value = 'spiral';
+            
+            // ランダム軌道をリセット
+            generateRandomPoints();
+        });
+        
+        // 画面をクリア
+        clearButton.addEventListener('click', () => {
+            // シーン内のすべてのオブジェクトを削除
+            while(scene.children.length > 0) { 
+                scene.remove(scene.children[0]); 
+            }
+            
+            // r, t 変数を初期値に戻す
+            r = TAU;
+            t = L(r);
+        });
+        
+        // アニメーション開始
+        animate();
+    </script>
+</body>
+</html>

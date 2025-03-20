@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three.js パターンアニメーション (最適化版)</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+    }
+    #control-panel {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-family: sans-serif;
+      z-index: 100;
+      width: 250px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    #toggle-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      z-index: 101;
+    }
+    .control-group {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    }
+    .control-item {
+      margin-bottom: 8px;
+    }
+    label {
+      display: block;
+      margin-bottom: 3px;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .value-display {
+      display: inline-block;
+      width: 40px;
+      text-align: right;
+    }
+    button {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      margin-right: 5px;
+      margin-top: 5px;
+    }
+    button:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    .color-picker {
+      display: flex;
+      align-items: center;
+    }
+    .color-picker input {
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <button id="toggle-controls">コントロール表示</button>
+  <div id="control-panel" style="display:none;">
+    <h3 style="margin-top: 0;">コントロールパネル</h3>
+    
+    <div class="control-group">
+      <div class="control-item">
+        <label>アニメーション速度 <span id="speed-value" class="value-display">1.0</span></label>
+        <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1">
+      </div>
+      <div class="control-item">
+        <label>線の密度 <span id="density-value" class="value-display">24</span></label>
+        <input type="range" id="density" min="8" max="48" step="8" value="24">
+      </div>
+      <div class="control-item">
+        <label>線の太さ <span id="thickness-value" class="value-display">1.0</span></label>
+        <input type="range" id="thickness" min="0.1" max="3" step="0.1" value="1">
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <div class="control-item">
+        <label>半径変化量 <span id="radius-variation-value" class="value-display">66</span></label>
+        <input type="range" id="radius-variation" min="10" max="150" step="1" value="66">
+      </div>
+      <div class="control-item">
+        <label>カメラ距離 <span id="camera-distance-value" class="value-display">400</span></label>
+        <input type="range" id="camera-distance" min="200" max="800" step="10" value="400">
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <div class="control-item">
+        <label>X軸回転 <span id="rotation-x-value" class="value-display">0</span></label>
+        <input type="range" id="rotation-x" min="-3.14" max="3.14" step="0.01" value="0">
+      </div>
+      <div class="control-item">
+        <label>Y軸回転 <span id="rotation-y-value" class="value-display">0</span></label>
+        <input type="range" id="rotation-y" min="-3.14" max="3.14" step="0.01" value="0">
+      </div>
+      <div class="control-item">
+        <label>Z軸回転 <span id="rotation-z-value" class="value-display">0</span></label>
+        <input type="range" id="rotation-z" min="-3.14" max="3.14" step="0.01" value="0">
+      </div>
+      <div class="control-item">
+        <label>回転速度 <span id="rotation-speed-value" class="value-display">0.01</span></label>
+        <input type="range" id="rotation-speed" min="0" max="0.1" step="0.001" value="0.01">
+      </div>
+      <div class="control-item">
+        <label>
+          <input type="checkbox" id="random-rotation"> ランダム回転
+        </label>
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <div class="control-item">
+        <label>線の色</label>
+        <div class="color-picker">
+          <input type="color" id="line-color" value="#ffffff">
+          <span>線の色を選択</span>
+        </div>
+      </div>
+      <div class="control-item">
+        <label>背景色</label>
+        <div class="color-picker">
+          <input type="color" id="bg-color" value="#000000">
+          <span>背景色を選択</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="control-group">
+      <div class="control-item">
+        <label>
+          <input type="checkbox" id="show-stats"> パフォーマンス表示
+        </label>
+      </div>
+    </div>
+    
+    <button id="reset">リセット</button>
+    <button id="random">ランダム設定</button>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.159.0/three.module.min.js",
+        "stats.js": "https://cdnjs.cloudflare.com/ajax/libs/stats.js/r17/Stats.min.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import Stats from 'stats.js';
+
+    // パフォーマンスモニター
+    const stats = new Stats();
+    stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+    document.body.appendChild(stats.dom);
+    stats.dom.style.display = 'none';
+
+    // 設定パラメータ
+    const params = {
+      speed: 1.0,
+      density: 24,  // 初期値を下げて最適化
+      lineThickness: 1.0,
+      radiusVariation: 66,
+      lineColor: 0xffffff,
+      bgColor: 0x000000,
+      cameraDistance: 400,
+      rotationX: 0,
+      rotationY: 0,
+      rotationZ: 0,
+      randomRotation: false,
+      rotationSpeed: 0.01,
+      showStats: false
+    };
+
+    // シーンのセットアップ
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(params.bgColor);
+
+    // カメラのセットアップ (9:16の縦長比率に設定)
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 2000);
+    camera.position.z = params.cameraDistance;
+
+    // レンダラーのセットアップ
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      powerPreference: 'high-performance' // 高パフォーマンスモード
+    });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // ピクセル比を制限して最適化
+    document.body.appendChild(renderer.domElement);
+
+    // ラインのマテリアル
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: params.lineColor,
+      linewidth: params.lineThickness
+    });
+
+    // ラインを保持するグループ
+    const linesGroup = new THREE.Group();
+    scene.add(linesGroup);
+
+    // ジオメトリのインスタンス
+    let linesArray = [];
+    let geometriesArray = [];
+    let currentLineCount = 0;
+
+    // 頂点データをキャッシュする配列
+    const verticesCache = new Float32Array(6 * 1000); // 最大1000ラインの頂点をキャッシュ
+
+    // ラインパターンの生成
+    function createLines() {
+      // 既存のラインをクリア
+      while (linesGroup.children.length > 0) {
+        const line = linesGroup.children[0];
+        linesGroup.remove(line);
+        line.geometry.dispose();
+      }
+      
+      linesArray = [];
+      geometriesArray = [];
+
+      const P = Math.PI / params.density; // 間隔を調整
+      const TAU = Math.PI * 2;
+      
+      // 必要なライン数を計算（前回のループカウントから大幅に変更がある場合のみ再生成）
+      const lineCount = Math.floor((TAU - P) / P) * Math.floor((TAU - P) / P);
+      
+      // 最適化: 一度に多数の小さなジオメトリを作成するのではなく、
+      // 少数の大きなジオメトリにラインを組み込む
+      const BATCH_SIZE = 100; // 1つのジオメトリあたりのライン数
+      const batchCount = Math.ceil(lineCount / BATCH_SIZE);
+      
+      currentLineCount = lineCount;
+
+      for (let b = 0; b < batchCount; b++) {
+        const startIndex = b * BATCH_SIZE;
+        const endIndex = Math.min((b + 1) * BATCH_SIZE, lineCount);
+        const linesInBatch = endIndex - startIndex;
+        
+        // 一つのバッチで使用する頂点数 (各ラインは2頂点 * xyz座標)
+        const vertices = new Float32Array(linesInBatch * 2 * 3);
+        
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        
+        const line = new THREE.LineSegments(geometry, lineMaterial);
+        linesGroup.add(line);
+        
+        linesArray.push(line);
+        geometriesArray.push(geometry);
+      }
+      
+      // 初期状態で更新
+      updateLines(0);
+    }
+
+    // ラインを更新する関数
+    function updateLines(f) {
+      const P = Math.PI / params.density;
+      const d = 0; // 中心位置
+      const TAU = Math.PI * 2;
+      
+      let lineIndex = 0;
+      let vertexOffset = 0;
+
+      for (let j = 0; j < TAU - P; j += P) {
+        for (let i = 0; i < TAU - P; i += P) {
+          if (lineIndex >= currentLineCount) continue;
+          
+          const h = params.radiusVariation;
+          const r = Math.sin(f) * h + h;
+          const R = Math.atan(f) * h + h;
+          
+          const I = i + f;
+          const J = j + f;
+          
+          // 点1の座標
+          let x1 = Math.cos(I) * R + d;
+          let y1 = Math.tan(I) * R;
+          let z1 = 0;
+          
+          // パターンの条件
+          if (x1 % 2 && x1 > d) {
+            x1 = 200;
+          } else {
+            x1 = 0;
+          }
+          
+          // 点2の座標
+          const x2 = Math.sin(J) * r + d;
+          const y2 = Math.cos(J) * r - h * Math.sin(f);
+          const z2 = 0;
+          
+          // 頂点キャッシュに座標を格納
+          verticesCache[vertexOffset++] = x1;
+          verticesCache[vertexOffset++] = y1;
+          verticesCache[vertexOffset++] = z1;
+          verticesCache[vertexOffset++] = x2;
+          verticesCache[vertexOffset++] = y2;
+          verticesCache[vertexOffset++] = z2;
+          
+          lineIndex++;
+        }
+      }
+      
+      // バッチごとに頂点データを更新
+      vertexOffset = 0;
+      
+      for (let b = 0; b < linesArray.length; b++) {
+        const geometry = geometriesArray[b];
+        const positions = geometry.attributes.position.array;
+        const batchSize = Math.min(100, currentLineCount - b * 100);
+        
+        // 頂点キャッシュからバッチ単位でコピー (各ライン2頂点 * xyz座標)
+        const byteLength = batchSize * 6 * 4; // Float32Array の各要素は4バイト
+        
+        // キャッシュから一度にコピー
+        positions.set(verticesCache.subarray(vertexOffset, vertexOffset + batchSize * 6));
+        vertexOffset += batchSize * 6;
+        
+        geometry.attributes.position.needsUpdate = true;
+      }
+    }
+
+    // 最適化されたタイマー
+    let lastTime = 0;
+    const targetFPS = 60;
+    const frameInterval = 1000 / targetFPS;
+
+    // アニメーションループ
+    let f = 0;
+    function animate(currentTime) {
+      requestAnimationFrame(animate);
+      
+      // 最適化: フレームレート制限
+      const elapsed = currentTime - lastTime;
+      if (elapsed < frameInterval) {
+        return;
+      }
+      
+      // FPS表示更新
+      stats.begin();
+      
+      // 時間差を考慮して前回のフレームからの経過時間に応じた量だけ更新
+      const delta = Math.min(elapsed / frameInterval, 2); // 大きな時間差は制限
+      lastTime = currentTime - (elapsed % frameInterval);
+      
+      // パターンのフレーム更新
+      f += (Math.PI / 512) * params.speed * delta;
+      
+      // ラインの更新
+      updateLines(f);
+      
+      // 回転の更新
+      if (params.randomRotation) {
+        // ランダム回転 (デルタタイムを考慮)
+        linesGroup.rotation.x += (Math.random() - 0.5) * params.rotationSpeed * delta;
+        linesGroup.rotation.y += (Math.random() - 0.5) * params.rotationSpeed * delta;
+        linesGroup.rotation.z += (Math.random() - 0.5) * params.rotationSpeed * delta;
+      } else {
+        // 固定角度での回転
+        linesGroup.rotation.x = params.rotationX;
+        linesGroup.rotation.y = params.rotationY;
+        linesGroup.rotation.z = params.rotationZ;
+      }
+      
+      renderer.render(scene, camera);
+      
+      stats.end();
+    }
+
+    // 初期化
+    createLines();
+    animate(0);
+
+    // ウィンドウリサイズ対応
+    window.addEventListener('resize', () => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      
+      renderer.setSize(width, height);
+    });
+
+    // コントロールパネルの機能
+    document.getElementById('toggle-controls').addEventListener('click', () => {
+      const panel = document.getElementById('control-panel');
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        document.getElementById('toggle-controls').textContent = 'コントロール非表示';
+      } else {
+        panel.style.display = 'none';
+        document.getElementById('toggle-controls').textContent = 'コントロール表示';
+      }
+    });
+
+    // パフォーマンス表示の切り替え
+    document.getElementById('show-stats').addEventListener('change', (e) => {
+      params.showStats = e.target.checked;
+      stats.dom.style.display = params.showStats ? 'block' : 'none';
+    });
+
+    // スライダーのイベントリスナー - イベントデバウンシング適用
+    let densityTimeout = null;
+    document.getElementById('density').addEventListener('input', (e) => {
+      params.density = parseInt(e.target.value);
+      document.getElementById('density-value').textContent = params.density;
+      
+      // 密度変更時は再生成が必要だが、スライダードラッグ中に何度も実行しないようにする
+      clearTimeout(densityTimeout);
+      densityTimeout = setTimeout(() => {
+        createLines();
+      }, 300); // 300ms後に実行
+    });
+
+    // その他のスライダー - すぐに反映
+    document.getElementById('speed').addEventListener('input', (e) => {
+      params.speed = parseFloat(e.target.value);
+      document.getElementById('speed-value').textContent = params.speed.toFixed(1);
+    });
+
+    document.getElementById('thickness').addEventListener('input', (e) => {
+      params.lineThickness = parseFloat(e.target.value);
+      document.getElementById('thickness-value').textContent = params.lineThickness.toFixed(1);
+      lineMaterial.linewidth = params.lineThickness;
+    });
+
+    document.getElementById('radius-variation').addEventListener('input', (e) => {
+      params.radiusVariation = parseInt(e.target.value);
+      document.getElementById('radius-variation-value').textContent = params.radiusVariation;
+    });
+
+    document.getElementById('camera-distance').addEventListener('input', (e) => {
+      params.cameraDistance = parseInt(e.target.value);
+      document.getElementById('camera-distance-value').textContent = params.cameraDistance;
+      camera.position.z = params.cameraDistance;
+    });
+
+    document.getElementById('line-color').addEventListener('input', (e) => {
+      params.lineColor = e.target.value;
+      lineMaterial.color.set(params.lineColor);
+    });
+
+    document.getElementById('bg-color').addEventListener('input', (e) => {
+      params.bgColor = e.target.value;
+      scene.background.set(params.bgColor);
+    });
+    
+    // 回転関連のイベントリスナー
+    document.getElementById('rotation-x').addEventListener('input', (e) => {
+      params.rotationX = parseFloat(e.target.value);
+      document.getElementById('rotation-x-value').textContent = params.rotationX.toFixed(2);
+    });
+    
+    document.getElementById('rotation-y').addEventListener('input', (e) => {
+      params.rotationY = parseFloat(e.target.value);
+      document.getElementById('rotation-y-value').textContent = params.rotationY.toFixed(2);
+    });
+    
+    document.getElementById('rotation-z').addEventListener('input', (e) => {
+      params.rotationZ = parseFloat(e.target.value);
+      document.getElementById('rotation-z-value').textContent = params.rotationZ.toFixed(2);
+    });
+    
+    document.getElementById('rotation-speed').addEventListener('input', (e) => {
+      params.rotationSpeed = parseFloat(e.target.value);
+      document.getElementById('rotation-speed-value').textContent = params.rotationSpeed.toFixed(3);
+    });
+    
+    document.getElementById('random-rotation').addEventListener('change', (e) => {
+      params.randomRotation = e.target.checked;
+    });
+
+    // リセットボタン
+    document.getElementById('reset').addEventListener('click', () => {
+      // パラメータを初期値に戻す
+      params.speed = 1.0;
+      params.density = 24;
+      params.lineThickness = 1.0;
+      params.radiusVariation = 66;
+      params.lineColor = 0xffffff;
+      params.bgColor = 0x000000;
+      params.cameraDistance = 400;
+      params.rotationX = 0;
+      params.rotationY = 0;
+      params.rotationZ = 0;
+      params.rotationSpeed = 0.01;
+      params.randomRotation = false;
+      
+      // UIの値を更新
+      document.getElementById('speed').value = params.speed;
+      document.getElementById('speed-value').textContent = params.speed.toFixed(1);
+      
+      document.getElementById('density').value = params.density;
+      document.getElementById('density-value').textContent = params.density;
+      
+      document.getElementById('thickness').value = params.lineThickness;
+      document.getElementById('thickness-value').textContent = params.lineThickness.toFixed(1);
+      
+      document.getElementById('radius-variation').value = params.radiusVariation;
+      document.getElementById('radius-variation-value').textContent = params.radiusVariation;
+      
+      document.getElementById('camera-distance').value = params.cameraDistance;
+      document.getElementById('camera-distance-value').textContent = params.cameraDistance;
+      
+      document.getElementById('rotation-x').value = params.rotationX;
+      document.getElementById('rotation-x-value').textContent = params.rotationX.toFixed(2);
+      
+      document.getElementById('rotation-y').value = params.rotationY;
+      document.getElementById('rotation-y-value').textContent = params.rotationY.toFixed(2);
+      
+      document.getElementById('rotation-z').value = params.rotationZ;
+      document.getElementById('rotation-z-value').textContent = params.rotationZ.toFixed(2);
+      
+      document.getElementById('rotation-speed').value = params.rotationSpeed;
+      document.getElementById('rotation-speed-value').textContent = params.rotationSpeed.toFixed(3);
+      
+      document.getElementById('random-rotation').checked = params.randomRotation;
+      
+      document.getElementById('line-color').value = '#ffffff';
+      document.getElementById('bg-color').value = '#000000';
+      
+      // 再作成
+      lineMaterial.color.set(params.lineColor);
+      scene.background.set(params.bgColor);
+      camera.position.z = params.cameraDistance;
+      lineMaterial.linewidth = params.lineThickness;
+      createLines();
+    });
+
+    // ランダム設定ボタン
+    document.getElementById('random').addEventListener('click', () => {
+      // ランダムな値を設定
+      params.speed = Math.random() * 4.9 + 0.1;
+      params.density = Math.floor(Math.random() * 5 + 1) * 8 + 8; // 8, 16, 24, 32, 40, 48
+      params.lineThickness = Math.random() * 2.9 + 0.1;
+      params.radiusVariation = Math.floor(Math.random() * 141) + 10;
+      params.lineColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+      params.bgColor = '#' + Math.floor(Math.random()*16777215).toString(16);
+      params.cameraDistance = Math.floor(Math.random() * 601) + 200;
+      params.rotationX = (Math.random() * 6.28) - 3.14;
+      params.rotationY = (Math.random() * 6.28) - 3.14;
+      params.rotationZ = (Math.random() * 6.28) - 3.14;
+      params.rotationSpeed = Math.random() * 0.1;
+      params.randomRotation = Math.random() > 0.5;
+      
+      // UIの値を更新
+      document.getElementById('speed').value = params.speed;
+      document.getElementById('speed-value').textContent = params.speed.toFixed(1);
+      
+      document.getElementById('density').value = params.density;
+      document.getElementById('density-value').textContent = params.density;
+      
+      document.getElementById('thickness').value = params.lineThickness;
+      document.getElementById('thickness-value').textContent = params.lineThickness.toFixed(1);
+      
+      document.getElementById('radius-variation').value = params.radiusVariation;
+      document.getElementById('radius-variation-value').textContent = params.radiusVariation;
+      
+      document.getElementById('camera-distance').value = params.cameraDistance;
+      document.getElementById('camera-distance-value').textContent = params.cameraDistance;
+      
+      document.getElementById('rotation-x').value = params.rotationX;
+      document.getElementById('rotation-x-value').textContent = params.rotationX.toFixed(2);
+      
+      document.getElementById('rotation-y').value = params.rotationY;
+      document.getElementById('rotation-y-value').textContent = params.rotationY.toFixed(2);
+      
+      document.getElementById('rotation-z').value = params.rotationZ;
+      document.getElementById('rotation-z-value').textContent = params.rotationZ.toFixed(2);
+      
+      document.getElementById('rotation-speed').value = params.rotationSpeed;
+      document.getElementById('rotation-speed-value').textContent = params.rotationSpeed.toFixed(3);
+      
+      document.getElementById('random-rotation').checked = params.randomRotation;
+      
+      document.getElementById('line-color').value = params.lineColor;
+      document.getElementById('bg-color').value = params.bgColor;
+      
+      // 再作成
+      lineMaterial.color.set(params.lineColor);
+      scene.background.set(params.bgColor);
+      camera.position.z = params.cameraDistance;
+      lineMaterial.linewidth = params.lineThickness;
+      createLines();
+    });
+  </script>
+</body>
+</html>

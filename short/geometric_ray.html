@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Three.js 幾何学的光線アニメーション</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
+    .dg.ac {
+      z-index: 1000 !important;
+    }
+  </style>
+</head>
+<body>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import GUI from 'lil-gui';
+
+    // キャンバスサイズ設定（9:16のアスペクト比）
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    // シーン、カメラ、レンダラーの初期化
+    const scene = new THREE.Scene();
+    
+    // OrthographicCameraを使用（シェーダーベースのエフェクトに適している）
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+    camera.position.z = 1;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    document.body.appendChild(renderer.domElement);
+
+    // GUI用の設定パラメータ
+    const params = {
+      // グリッドパターン設定
+      gridScale: 20.0,
+      gridRotationSpeed: 0.1,
+      gridDensity: 1.0,
+      
+      // 光設定
+      lightRadius: 0.4,
+      lightIntensity: 1.5,
+      lightPosition: 0.0,
+      lightColor: '#ffffff',
+      backgroundColor: '#000000',
+      
+      // アニメーション設定
+      animationSpeed: 0.5,
+      pulseSpeed: 0.2,
+      waveAmplitude: 0.1,
+      
+      // 効果設定
+      blurAmount: 0.05,
+      lineThickness: 0.03,
+      contrast: 1.2,
+      
+      // プリセット
+      preset: 'Default',
+      applyPreset: function() {
+        applyPreset(this.preset);
+      }
+    };
+
+    // シェーダー定義
+    const vertexShader = `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `;
+
+    const fragmentShader = `
+      varying vec2 vUv;
+      
+      uniform float uTime;
+      uniform float uGridScale;
+      uniform float uGridRotationSpeed;
+      uniform float uGridDensity;
+      uniform float uLightRadius;
+      uniform float uLightIntensity;
+      uniform float uLightPosition;
+      uniform vec3 uLightColor;
+      uniform vec3 uBackgroundColor;
+      uniform float uAnimationSpeed;
+      uniform float uPulseSpeed;
+      uniform float uWaveAmplitude;
+      uniform float uBlurAmount;
+      uniform float uLineThickness;
+      uniform float uContrast;
+      
+      // 回転行列
+      mat2 rotate2D(float angle) {
+        float s = sin(angle);
+        float c = cos(angle);
+        return mat2(c, -s, s, c);
+      }
+      
+      // 格子パターンを作成
+      float grid(vec2 uv, float width) {
+        vec2 grid = abs(fract(uv - 0.5) - 0.5) / fwidth(uv * width);
+        return min(grid.x, grid.y);
+      }
+      
+      // 放射状のブラー効果
+      float radialBlur(vec2 uv, vec2 center, float radius, float intensity) {
+        float dist = length(uv - center);
+        float blur = smoothstep(radius, radius * (1.0 + uBlurAmount), dist);
+        return 1.0 - blur * intensity;
+      }
+      
+      // 波紋効果
+      float ripple(vec2 uv, vec2 center, float time) {
+        float dist = length(uv - center);
+        float wave = sin(dist * 40.0 - time * 5.0) * uWaveAmplitude;
+        return wave * smoothstep(0.5, 0.0, dist);
+      }
+      
+      void main() {
+        // 中心点を調整（下部中央）
+        vec2 center = vec2(0.5, uLightPosition);
+        
+        // 時間ベースのアニメーション
+        float time = uTime * uAnimationSpeed;
+        
+        // 回転するUV座標
+        vec2 rotatedUv = vUv - center;
+        rotatedUv = rotate2D(time * uGridRotationSpeed) * rotatedUv;
+        rotatedUv = rotatedUv + center;
+        
+        // 格子を描画（回転＋スケール調整）
+        float gridPattern1 = grid(rotatedUv * uGridScale * uGridDensity, 1.0);
+        float gridPattern2 = grid(rotate2D(0.785398) * rotatedUv * uGridScale * uGridDensity, 1.0); // 45度回転
+        
+        // 二つのグリッドを組み合わせる
+        float combinedGrid = min(gridPattern1, gridPattern2);
+        
+        // 線の太さを調整
+        float gridMask = 1.0 - smoothstep(0.0, uLineThickness, combinedGrid);
+        
+        // 光源の放射効果
+        float lightEffect = radialBlur(vUv, center, uLightRadius, uLightIntensity);
+        lightEffect += ripple(vUv, center, time * uPulseSpeed);
+        lightEffect = clamp(lightEffect, 0.0, 1.0);
+        
+        // 明るさの脈動
+        float pulse = 0.5 + 0.5 * sin(time * uPulseSpeed * 3.14159);
+        lightEffect *= mix(0.7, 1.0, pulse);
+        
+        // グリッドと光を合成
+        float pattern = gridMask * lightEffect;
+        
+        // コントラスト調整
+        pattern = pow(pattern, uContrast);
+        
+        // 色の設定
+        vec3 finalColor = mix(uBackgroundColor, uLightColor, pattern);
+        
+        gl_FragColor = vec4(finalColor, 1.0);
+      }
+    `;
+
+    // ShaderMaterialの作成
+    const uniforms = {
+      uTime: { value: 0 },
+      uGridScale: { value: params.gridScale },
+      uGridRotationSpeed: { value: params.gridRotationSpeed },
+      uGridDensity: { value: params.gridDensity },
+      uLightRadius: { value: params.lightRadius },
+      uLightIntensity: { value: params.lightIntensity },
+      uLightPosition: { value: params.lightPosition },
+      uLightColor: { value: new THREE.Color(params.lightColor) },
+      uBackgroundColor: { value: new THREE.Color(params.backgroundColor) },
+      uAnimationSpeed: { value: params.animationSpeed },
+      uPulseSpeed: { value: params.pulseSpeed },
+      uWaveAmplitude: { value: params.waveAmplitude },
+      uBlurAmount: { value: params.blurAmount },
+      uLineThickness: { value: params.lineThickness },
+      uContrast: { value: params.contrast }
+    };
+
+    const shaderMaterial = new THREE.ShaderMaterial({
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      uniforms: uniforms
+    });
+
+    // 全画面を覆う平面ジオメトリ
+    const planeGeometry = new THREE.PlaneGeometry(2, 2);
+    const plane = new THREE.Mesh(planeGeometry, shaderMaterial);
+    scene.add(plane);
+
+    // プリセット定義
+    const presets = {
+      'Default': {
+        gridScale: 20.0,
+        gridRotationSpeed: 0.1,
+        gridDensity: 1.0,
+        lightRadius: 0.4,
+        lightIntensity: 1.5,
+        lightPosition: 0.0,
+        lightColor: '#ffffff',
+        backgroundColor: '#000000',
+        animationSpeed: 0.5,
+        pulseSpeed: 0.2,
+        waveAmplitude: 0.1,
+        blurAmount: 0.05,
+        lineThickness: 0.03,
+        contrast: 1.2
+      },
+      'Image Match': {
+        gridScale: 30.0,
+        gridRotationSpeed: 0.05,
+        gridDensity: 1.2,
+        lightRadius: 0.3,
+        lightIntensity: 2.0,
+        lightPosition: 0.1,
+        lightColor: '#ffffff',
+        backgroundColor: '#000000',
+        animationSpeed: 0.3,
+        pulseSpeed: 0.1,
+        waveAmplitude: 0.05,
+        blurAmount: 0.1,
+        lineThickness: 0.02,
+        contrast: 1.5
+      },
+      'Soft Glow': {
+        gridScale: 15.0,
+        gridRotationSpeed: 0.07,
+        gridDensity: 0.8,
+        lightRadius: 0.5,
+        lightIntensity: 1.2,
+        lightPosition: 0.0,
+        lightColor: '#ffffcc',
+        backgroundColor: '#000011',
+        animationSpeed: 0.3,
+        pulseSpeed: 0.15,
+        waveAmplitude: 0.15,
+        blurAmount: 0.15,
+        lineThickness: 0.04,
+        contrast: 1.0
+      },
+      'Fast Lines': {
+        gridScale: 40.0,
+        gridRotationSpeed: 0.2,
+        gridDensity: 1.5,
+        lightRadius: 0.3,
+        lightIntensity: 1.8,
+        lightPosition: 0.0,
+        lightColor: '#ffffff',
+        backgroundColor: '#000000',
+        animationSpeed: 1.0,
+        pulseSpeed: 0.3,
+        waveAmplitude: 0.08,
+        blurAmount: 0.03,
+        lineThickness: 0.02,
+        contrast: 1.4
+      },
+      'Dreamy': {
+        gridScale: 12.0,
+        gridRotationSpeed: 0.04,
+        gridDensity: 0.7,
+        lightRadius: 0.6,
+        lightIntensity: 1.3,
+        lightPosition: 0.1,
+        lightColor: '#eeeeff',
+        backgroundColor: '#111122',
+        animationSpeed: 0.2,
+        pulseSpeed: 0.1,
+        waveAmplitude: 0.2,
+        blurAmount: 0.2,
+        lineThickness: 0.05,
+        contrast: 0.9
+      }
+    };
+
+    // プリセットを適用する関数
+    function applyPreset(presetName) {
+      const preset = presets[presetName];
+      if (!preset) return;
+      
+      // パラメータの更新
+      for (const key in preset) {
+        if (params.hasOwnProperty(key)) {
+          params[key] = preset[key];
+          
+          // uniformsの更新
+          if (key === 'lightColor' || key === 'backgroundColor') {
+            uniforms['u' + key.charAt(0).toUpperCase() + key.slice(1)].value.set(preset[key]);
+          } else if (uniforms['u' + key.charAt(0).toUpperCase() + key.slice(1)]) {
+            uniforms['u' + key.charAt(0).toUpperCase() + key.slice(1)].value = preset[key];
+          }
+        }
+      }
+      
+      // GUIの更新
+      updateGUI();
+    }
+
+    // GUI設定
+    const gui = new GUI();
+    
+    // プリセットフォルダ
+    const presetFolder = gui.addFolder('プリセット');
+    presetFolder.add(params, 'preset', Object.keys(presets)).name('選択');
+    presetFolder.add(params, 'applyPreset').name('適用');
+    
+    // グリッド設定フォルダ
+    const gridFolder = gui.addFolder('グリッド設定');
+    gridFolder.add(params, 'gridScale', 5.0, 50.0).name('グリッドスケール').onChange(value => {
+      uniforms.uGridScale.value = value;
+    });
+    gridFolder.add(params, 'gridRotationSpeed', 0.0, 0.5).name('回転速度').onChange(value => {
+      uniforms.uGridRotationSpeed.value = value;
+    });
+    gridFolder.add(params, 'gridDensity', 0.5, 2.0).name('密度').onChange(value => {
+      uniforms.uGridDensity.value = value;
+    });
+    gridFolder.add(params, 'lineThickness', 0.01, 0.1).name('線の太さ').onChange(value => {
+      uniforms.uLineThickness.value = value;
+    });
+    
+    // 光設定フォルダ
+    const lightFolder = gui.addFolder('光設定');
+    lightFolder.add(params, 'lightRadius', 0.1, 1.0).name('光の半径').onChange(value => {
+      uniforms.uLightRadius.value = value;
+    });
+    lightFolder.add(params, 'lightIntensity', 0.5, 3.0).name('光の強さ').onChange(value => {
+      uniforms.uLightIntensity.value = value;
+    });
+    lightFolder.add(params, 'lightPosition', -0.5, 0.5).name('光の位置').onChange(value => {
+      uniforms.uLightPosition.value = value;
+    });
+    lightFolder.addColor(params, 'lightColor').name('光の色').onChange(value => {
+      uniforms.uLightColor.value.set(value);
+    });
+    lightFolder.addColor(params, 'backgroundColor').name('背景色').onChange(value => {
+      uniforms.uBackgroundColor.value.set(value);
+    });
+    
+    // アニメーション設定フォルダ
+    const animationFolder = gui.addFolder('アニメーション');
+    animationFolder.add(params, 'animationSpeed', 0.0, 2.0).name('アニメーション速度').onChange(value => {
+      uniforms.uAnimationSpeed.value = value;
+    });
+    animationFolder.add(params, 'pulseSpeed', 0.0, 1.0).name('脈動速度').onChange(value => {
+      uniforms.uPulseSpeed.value = value;
+    });
+    animationFolder.add(params, 'waveAmplitude', 0.0, 0.3).name('波の強さ').onChange(value => {
+      uniforms.uWaveAmplitude.value = value;
+    });
+    
+    // 効果設定フォルダ
+    const effectFolder = gui.addFolder('効果設定');
+    effectFolder.add(params, 'blurAmount', 0.0, 0.3).name('ぼかし量').onChange(value => {
+      uniforms.uBlurAmount.value = value;
+    });
+    effectFolder.add(params, 'contrast', 0.5, 2.0).name('コントラスト').onChange(value => {
+      uniforms.uContrast.value = value;
+    });
+    
+    // フォルダを開いておく
+    presetFolder.open();
+    gridFolder.open();
+    lightFolder.open();
+    
+    // GUIを更新する関数
+    function updateGUI() {
+      // 全コントローラーを更新
+      for (const folder of [presetFolder, gridFolder, lightFolder, animationFolder, effectFolder]) {
+        for (const controller of folder.controllers) {
+          controller.updateDisplay();
+        }
+      }
+    }
+
+    // 最初に「Image Match」プリセットを適用
+    applyPreset('Image Match');
+
+    // アニメーションループ
+    const clock = new THREE.Clock();
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // 時間の更新
+      uniforms.uTime.value = clock.getElapsedTime();
+      
+      renderer.render(scene, camera);
+    }
+
+    // ウィンドウリサイズ対応
+    window.addEventListener('resize', () => {
+      const newWidth = window.innerWidth;
+      const newHeight = window.innerHeight;
+      
+      renderer.setSize(newWidth, newHeight);
+    });
+
+    // アニメーション開始
+    animate();
+  </script>
+</body>
+</html>

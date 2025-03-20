@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>スキャナー効果 - コントロールパネル付き</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #000;
+    }
+    canvas {
+      width: 56.25vh; /* 9:16 aspect ratio for vertical video */
+      height: 100vh;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .instructions {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      color: white;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-family: sans-serif;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="instructions">マウスドラッグ: 視点回転 / マウスホイール: ズーム</div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.18.2/+esm';
+    
+    // 設定
+    const config = {
+      // アニメーションパラメータ
+      animationSpeed: 0.02,
+      scanSpeed: 99,
+      oscillationFactor: 3,
+      
+      // トーラスパラメータ
+      torusRadius: 99,
+      torusThickness: 20,
+      torusSegments: 24,
+      torusTubularSegments: 99,
+      
+      // 球体パラメータ
+      sphereBaseSize: 12,
+      sphereMultiplier: 1,
+      
+      // 色
+      torus1Color: '#ffffff',
+      torus2Color: '#ffffff',
+      sphereColor: '#ffffff',
+      backgroundColor: '#000000',
+      
+      // マテリアル
+      shininess: 30,
+      wireframe: false,
+      
+      // カメラ設定
+      cameraDistance: 200,
+      cameraAutoRotate: false,
+      cameraAutoRotateSpeed: 1.0,
+      resetCamera: function() {
+        // カメラを初期位置にリセット
+        camera.position.set(0, 0, config.cameraDistance);
+        controls.reset();
+      },
+      
+      // スキャンラインの有効/無効
+      scanlineEnabled: true,
+      
+      // デフォルトに戻す
+      reset: function() {
+        // デフォルト値に戻す
+        config.animationSpeed = 0.02;
+        config.scanSpeed = 99;
+        config.oscillationFactor = 3;
+        config.torusRadius = 99;
+        config.torusThickness = 20;
+        config.torusSegments = 24;
+        config.torusTubularSegments = 99;
+        config.sphereBaseSize = 12;
+        config.sphereMultiplier = 1;
+        config.torus1Color = '#ffffff';
+        config.torus2Color = '#ffffff';
+        config.sphereColor = '#ffffff';
+        config.backgroundColor = '#000000';
+        config.shininess = 30;
+        config.wireframe = false;
+        config.cameraDistance = 200;
+        config.cameraAutoRotate = false;
+        config.cameraAutoRotateSpeed = 1.0;
+        config.scanlineEnabled = true;
+        
+        // マテリアルとジオメトリを更新
+        updateMaterials();
+        updateGeometries();
+        
+        // カメラをリセット
+        camera.position.set(0, 0, config.cameraDistance);
+        controls.reset();
+        
+        // コントローラーの表示を更新
+        for (const controller of Object.values(controllers)) {
+          controller.updateDisplay();
+        }
+      }
+    };
+    
+    // 変数の初期化
+    const width = 400;
+    const height = 400;
+    let r = 0; // アニメーションパラメータ
+    
+    // レンダラーの設定
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(width, height);
+    document.body.appendChild(renderer.domElement);
+    
+    // シーンの作成
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(config.backgroundColor);
+    
+    // カメラの作成
+    const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    camera.position.z = config.cameraDistance;
+    
+    // OrbitControlsの設定
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    
+    // ライトの追加
+    const ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(1, 1, 1);
+    scene.add(directionalLight);
+    
+    // トーラスのマテリアル作成
+    const torus1Material = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(config.torus1Color),
+      shininess: config.shininess,
+      wireframe: config.wireframe
+    });
+    
+    const torus2Material = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(config.torus2Color),
+      shininess: config.shininess,
+      wireframe: config.wireframe
+    });
+    
+    const sphereMaterial = new THREE.MeshPhongMaterial({
+      color: new THREE.Color(config.sphereColor),
+      shininess: config.shininess,
+      wireframe: config.wireframe
+    });
+    
+    // ジオメトリの作成
+    let torusGeometry = new THREE.TorusGeometry(
+      config.torusRadius,
+      config.torusThickness,
+      config.torusSegments,
+      config.torusTubularSegments
+    );
+    
+    let sphereGeometry = new THREE.SphereGeometry(
+      config.sphereBaseSize,
+      32,
+      32
+    );
+    
+    // メッシュの作成
+    const torus1 = new THREE.Mesh(torusGeometry, torus1Material);
+    const torus2 = new THREE.Mesh(torusGeometry, torus2Material);
+    torus2.rotation.x = Math.PI / 2; // 2つ目のトーラスを90度回転
+    
+    const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+    
+    // オブジェクトグループの作成
+    const objectGroup = new THREE.Group();
+    objectGroup.add(torus1);
+    objectGroup.add(torus2);
+    objectGroup.add(sphere);
+    scene.add(objectGroup);
+    
+    // 設定に基づいてマテリアルを更新する関数
+    function updateMaterials() {
+      torus1Material.color.set(config.torus1Color);
+      torus2Material.color.set(config.torus2Color);
+      sphereMaterial.color.set(config.sphereColor);
+      
+      torus1Material.shininess = config.shininess;
+      torus2Material.shininess = config.shininess;
+      sphereMaterial.shininess = config.shininess;
+      
+      torus1Material.wireframe = config.wireframe;
+      torus2Material.wireframe = config.wireframe;
+      sphereMaterial.wireframe = config.wireframe;
+      
+      scene.background = new THREE.Color(config.backgroundColor);
+    }
+    
+    // 設定に基づいてジオメトリを更新する関数
+    function updateGeometries() {
+      // トーラスジオメトリの更新
+      const newTorusGeometry = new THREE.TorusGeometry(
+        config.torusRadius,
+        config.torusThickness,
+        config.torusSegments,
+        config.torusTubularSegments
+      );
+      
+      torus1.geometry.dispose();
+      torus2.geometry.dispose();
+      torus1.geometry = newTorusGeometry;
+      torus2.geometry = newTorusGeometry;
+      
+      // 球体ジオメトリの更新
+      const newSphereGeometry = new THREE.SphereGeometry(
+        config.sphereBaseSize,
+        32,
+        32
+      );
+      
+      sphere.geometry.dispose();
+      sphere.geometry = newSphereGeometry;
+    }
+    
+    // アニメーションループ
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // カメラコントロールの更新
+      controls.update();
+      controls.autoRotate = config.cameraAutoRotate;
+      controls.autoRotateSpeed = config.cameraAutoRotateSpeed;
+      
+      if (config.scanlineEnabled) {
+        // スキャンライン効果の有効化
+        renderer.setScissorTest(true);
+        
+        // 各スキャンラインについて
+        for (let y = 0; y < height; y++) {
+          // このスキャンラインの回転値を計算
+          const rotation = Math.sin(r) * y / config.scanSpeed + config.oscillationFactor * Math.cos(r);
+          
+          // オブジェクト回転の設定
+          objectGroup.rotation.y = rotation;
+          
+          // 球体のスケールを設定
+          const scaleFactor = rotation * config.sphereMultiplier;
+          const adjustedScale = Math.max(0.1, scaleFactor); // 負または0のスケールを防止
+          sphere.scale.set(adjustedScale, adjustedScale, adjustedScale);
+          
+          // このスキャンラインだけをレンダリングするようにシザーを設定
+          renderer.setScissor(0, height - y - 1, width, 1);
+          
+          // このスキャンラインのシーンをレンダリング
+          renderer.render(scene, camera);
+        }
+        
+        // シザーテストの無効化
+        renderer.setScissorTest(false);
+        
+        // アニメーションパラメータの更新
+        r += config.animationSpeed;
+      } else {
+        // 通常のレンダリング（スキャンライン効果なし）
+        const rotation = Math.sin(r) * config.oscillationFactor;
+        objectGroup.rotation.y = rotation;
+        
+        const scaleFactor = rotation * config.sphereMultiplier;
+        const adjustedScale = Math.max(0.1, scaleFactor);
+        sphere.scale.set(adjustedScale, adjustedScale, adjustedScale);
+        
+        renderer.render(scene, camera);
+        
+        r += config.animationSpeed;
+      }
+    }
+    
+    // GUIの初期化
+    const gui = new GUI({ title: '設定パネル' });
+    const controllers = {};
+    
+    // アニメーションフォルダ
+    const animationFolder = gui.addFolder('アニメーション');
+    controllers.animationSpeed = animationFolder.add(config, 'animationSpeed', 0.001, 0.1).name('速度');
+    controllers.scanSpeed = animationFolder.add(config, 'scanSpeed', 10, 200).name('スキャン密度');
+    controllers.oscillationFactor = animationFolder.add(config, 'oscillationFactor', 0.1, 10).name('波の強さ');
+    controllers.scanlineEnabled = animationFolder.add(config, 'scanlineEnabled').name('スキャンライン効果');
+    animationFolder.open();
+    
+    // トーラスフォルダ
+    const torusFolder = gui.addFolder('トーラス設定');
+    controllers.torusRadius = torusFolder.add(config, 'torusRadius', 20, 150).name('半径').onChange(updateGeometries);
+    controllers.torusThickness = torusFolder.add(config, 'torusThickness', 1, 50).name('太さ').onChange(updateGeometries);
+    controllers.torusSegments = torusFolder.add(config, 'torusSegments', 8, 64, 1).name('分割数').onChange(updateGeometries);
+    controllers.torusTubularSegments = torusFolder.add(config, 'torusTubularSegments', 8, 200, 1).name('管状分割数').onChange(updateGeometries);
+    torusFolder.open();
+    
+    // 球体フォルダ
+    const sphereFolder = gui.addFolder('球体設定');
+    controllers.sphereBaseSize = sphereFolder.add(config, 'sphereBaseSize', 1, 50).name('基本サイズ').onChange(updateGeometries);
+    controllers.sphereMultiplier = sphereFolder.add(config, 'sphereMultiplier', 0.1, 5).name('サイズ倍率');
+    sphereFolder.open();
+    
+    // 色フォルダ
+    const colorsFolder = gui.addFolder('色設定');
+    controllers.torus1Color = colorsFolder.addColor(config, 'torus1Color').name('トーラス1').onChange(updateMaterials);
+    controllers.torus2Color = colorsFolder.addColor(config, 'torus2Color').name('トーラス2').onChange(updateMaterials);
+    controllers.sphereColor = colorsFolder.addColor(config, 'sphereColor').name('球体').onChange(updateMaterials);
+    controllers.backgroundColor = colorsFolder.addColor(config, 'backgroundColor').name('背景').onChange(updateMaterials);
+    colorsFolder.open();
+    
+    // マテリアルフォルダ
+    const materialFolder = gui.addFolder('マテリアル');
+    controllers.shininess = materialFolder.add(config, 'shininess', 0, 100).name('光沢').onChange(updateMaterials);
+    controllers.wireframe = materialFolder.add(config, 'wireframe').name('ワイヤーフレーム').onChange(updateMaterials);
+    materialFolder.open();
+    
+    // カメラフォルダ
+    const cameraFolder = gui.addFolder('カメラ設定');
+    controllers.cameraAutoRotate = cameraFolder.add(config, 'cameraAutoRotate').name('自動回転');
+    controllers.cameraAutoRotateSpeed = cameraFolder.add(config, 'cameraAutoRotateSpeed', 0.1, 5).name('回転速度');
+    controllers.resetCamera = cameraFolder.add(config, 'resetCamera').name('カメラリセット');
+    cameraFolder.open();
+    
+    // リセットボタン
+    gui.add(config, 'reset').name('すべてリセット');
+    
+    // GUIの位置設定
+    gui.domElement.style.position = 'absolute';
+    gui.domElement.style.top = '10px';
+    gui.domElement.style.right = '10px';
+    
+    // アニメーション開始
+    animate();
+    
+    // ウィンドウリサイズの処理
+    window.addEventListener('resize', () => {
+      const containerWidth = window.innerWidth;
+      const containerHeight = window.innerHeight;
+      
+      // 9:16のアスペクト比を維持するサイズを計算（縦長動画用）
+      let newWidth, newHeight;
+      
+      if (containerWidth / containerHeight > 9/16) {
+        // コンテナが9:16より広い場合、高さで幅を決定
+        newHeight = containerHeight;
+        newWidth = containerHeight * 9/16;
+      } else {
+        // コンテナが9:16より縦長の場合、幅で高さを決定
+        newWidth = containerWidth;
+        newHeight = containerWidth * 16/9;
+      }
+      
+      // レンダラーのサイズを更新
+      renderer.setSize(newWidth, newHeight);
+    });
+  </script>
+</body>
+</html>

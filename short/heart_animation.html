@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>かわいいハートパターンアニメーション</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', 'メイリオ', sans-serif;
+        }
+        canvas {
+            display: block;
+            aspect-ratio: 9/16;
+            max-height: 100vh;
+            max-width: 100vw;
+        }
+        #control-panel {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 0 0 0 10px;
+            z-index: 100;
+            width: 250px;
+            max-height: 100vh;
+            overflow-y: auto;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .slider-value {
+            display: inline-block;
+            width: 40px;
+            text-align: right;
+            margin-left: 10px;
+        }
+        .control-slider {
+            width: 180px;
+        }
+        button {
+            padding: 8px 12px;
+            background-color: #ff69b4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+        }
+        button:hover {
+            background-color: #ff5ba7;
+        }
+        .color-preview {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div id="control-panel">
+        <h3>コントロールパネル</h3>
+        
+        <div class="control-group">
+            <label class="control-label">ハートの色</label>
+            <input type="color" id="heartColor" value="#ff1493">
+            <span class="color-preview" id="heartColorPreview" style="background-color: #ff1493;"></span>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">背景色</label>
+            <input type="color" id="bgColor" value="#000000">
+            <span class="color-preview" id="bgColorPreview" style="background-color: #000000;"></span>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">アニメーション速度 <span class="slider-value" id="speedValue">1.0</span></label>
+            <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1" class="control-slider">
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">ハートサイズ <span class="slider-value" id="sizeValue">1.5</span></label>
+            <input type="range" id="size" min="0.2" max="3" step="0.1" value="1.5" class="control-slider">
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">ハートの数 <span class="slider-value" id="densityValue">40</span></label>
+            <input type="range" id="density" min="10" max="100" step="1" value="40" class="control-slider">
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">回転の複雑さ <span class="slider-value" id="complexityValue">1.0</span></label>
+            <input type="range" id="complexity" min="0.1" max="3" step="0.1" value="1" class="control-slider">
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">スタイル</label>
+            <button id="styleFilled">塗りつぶし</button>
+            <button id="styleOutline">枠線のみ</button>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">プリセット</label>
+            <button id="presetCute">かわいい</button>
+            <button id="presetDynamic">ダイナミック</button>
+            <button id="presetDream">ドリーミー</button>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        
+        // セットアップ
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000);
+        
+        // カメラ設定
+        const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+        camera.position.z = 5;
+        
+        // 9:16アスペクト比でレスポンシブなレンダラー設定
+        const aspectRatio = 9/16;
+        const getCanvasSize = () => {
+            const height = Math.min(window.innerHeight, window.innerWidth / aspectRatio);
+            const width = height * aspectRatio;
+            return { width, height };
+        };
+        
+        const size = getCanvasSize();
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(size.width, size.height);
+        document.body.appendChild(renderer.domElement);
+        
+        // パラメータ設定（コントロールパネルからのデフォルト値）
+        const params = {
+            heartColor: 0xff1493,  // ディープピンク
+            bgColor: 0x000000,     // 黒
+            speed: 1.0,            // アニメーション速度
+            size: 1.5,             // ハートのサイズ
+            density: 40,           // リングの数 (密度)
+            anglesPerRing: 36,     // リングごとのハートの数
+            complexity: 1.0,       // 回転の複雑さ
+            filled: true           // 塗りつぶしスタイル
+        };
+        
+        // アニメーション変数
+        const F = 9;  // アニメーションサイクルの長さ
+        let f = 0;    // フレームカウンター
+        let instancedMesh;
+        
+        // ハート形状の作成関数 - より明確なハート形状
+        function createHeartShape() {
+            const heartShape = new THREE.Shape();
+            
+            // より明確なハート形状を定義
+            // この式はハートの数学的表現に基づいています
+            const scale = 0.15;
+            
+            // ハートの描画をx=0, y=0の中心に配置するためのオフセット
+            const offsetY = 0.05;
+            
+            // ハート曲線の計算と描画
+            const numPoints = 30;
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i / numPoints * Math.PI * 2;
+                
+                // ハートの数式： (16sin³(t), 13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t))
+                const x = 16 * Math.pow(Math.sin(t), 3);
+                const y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                
+                // スケーリングと方向調整（上向きのハートに）
+                const scaledX = x * scale;
+                const scaledY = -y * scale + offsetY;
+                
+                if (i === 0) {
+                    heartShape.moveTo(scaledX, scaledY);
+                } else {
+                    heartShape.lineTo(scaledX, scaledY);
+                }
+            }
+            
+            return heartShape;
+        }
+        
+        // ハートジオメトリを作成
+        function createHeartGeometry() {
+            const heartShape = createHeartShape();
+            return new THREE.ShapeGeometry(heartShape);
+        }
+        
+        // インスタンス化メッシュの作成
+        function createInstancedMesh() {
+            // 古いメッシュがあれば削除
+            if (instancedMesh) {
+                scene.remove(instancedMesh);
+                instancedMesh.geometry.dispose();
+                instancedMesh.material.dispose();
+            }
+            
+            const totalHearts = params.density * params.anglesPerRing;
+            const heartGeometry = createHeartGeometry();
+            
+            // マテリアル作成
+            const material = params.filled ?
+                new THREE.MeshBasicMaterial({ color: params.heartColor }) :
+                new THREE.MeshBasicMaterial({ 
+                    color: params.heartColor,
+                    wireframe: true,
+                    wireframeLinewidth: 2
+                });
+            
+            // インスタンス化メッシュを作成
+            instancedMesh = new THREE.InstancedMesh(heartGeometry, material, totalHearts);
+            scene.add(instancedMesh);
+        }
+        
+        // ハートの位置を更新する関数
+        function updateHearts(time) {
+            const TAU = Math.PI * 2;
+            const matrix = new THREE.Matrix4();
+            let instanceIndex = 0;
+            
+            // リングをループ
+            for(let j = 0; j < params.density; j++) {
+                // 半径を計算
+                const r = Math.pow((j + time) / params.density, 0.75);
+                
+                // 角度をループ
+                for(let i = 0; i < TAU; i += TAU / params.anglesPerRing) {
+                    // 位置を計算
+                    const x = Math.sin(i + r * TAU * params.complexity) * r;
+                    const y = Math.cos(i + r * TAU * params.complexity) * r;
+                    
+                    // サイズ計算
+                    const scale = 0.05 * r * params.size;
+                    
+                    // 角度計算: ハートが中心を向くように調整
+                    const angle = Math.atan2(y, x) + Math.PI / 2;
+                    
+                    // 変換マトリックスを作成
+                    matrix.makeRotationZ(angle);
+                    matrix.scale(new THREE.Vector3(scale, scale, 1));
+                    matrix.setPosition(x, y, 0);
+                    
+                    // インスタンスに変換を適用
+                    instancedMesh.setMatrixAt(instanceIndex, matrix);
+                    instanceIndex++;
+                }
+            }
+            
+            // インスタンスマトリックスを更新
+            instancedMesh.instanceMatrix.needsUpdate = true;
+        }
+        
+        // アニメーションループ
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // 速度調整を反映した時間値を計算
+            const t = ((f * params.speed) / F) % 1;
+            f++;
+            
+            // ハートの位置を更新
+            if (instancedMesh) {
+                updateHearts(t);
+            }
+            
+            // レンダリング
+            renderer.render(scene, camera);
+        }
+        
+        // 初期化
+        function init() {
+            createInstancedMesh();
+            animate();
+        }
+        
+        // UIコントロールのイベントリスナーを設定
+        function setupControls() {
+            // 色の変更
+            document.getElementById('heartColor').addEventListener('input', function(e) {
+                params.heartColor = parseInt(e.target.value.substring(1), 16);
+                document.getElementById('heartColorPreview').style.backgroundColor = e.target.value;
+                if (instancedMesh) {
+                    instancedMesh.material.color.set(params.heartColor);
+                }
+            });
+            
+            document.getElementById('bgColor').addEventListener('input', function(e) {
+                params.bgColor = parseInt(e.target.value.substring(1), 16);
+                document.getElementById('bgColorPreview').style.backgroundColor = e.target.value;
+                scene.background.set(params.bgColor);
+            });
+            
+            // スライダーの変更
+            document.getElementById('speed').addEventListener('input', function(e) {
+                params.speed = parseFloat(e.target.value);
+                document.getElementById('speedValue').textContent = params.speed.toFixed(1);
+            });
+            
+            document.getElementById('size').addEventListener('input', function(e) {
+                params.size = parseFloat(e.target.value);
+                document.getElementById('sizeValue').textContent = params.size.toFixed(1);
+            });
+            
+            document.getElementById('density').addEventListener('input', function(e) {
+                params.density = parseInt(e.target.value);
+                document.getElementById('densityValue').textContent = params.density;
+                createInstancedMesh();
+            });
+            
+            document.getElementById('complexity').addEventListener('input', function(e) {
+                params.complexity = parseFloat(e.target.value);
+                document.getElementById('complexityValue').textContent = params.complexity.toFixed(1);
+            });
+            
+            // スタイルボタン
+            document.getElementById('styleFilled').addEventListener('click', function() {
+                params.filled = true;
+                createInstancedMesh();
+            });
+            
+            document.getElementById('styleOutline').addEventListener('click', function() {
+                params.filled = false;
+                createInstancedMesh();
+            });
+            
+            // プリセットボタン
+            document.getElementById('presetCute').addEventListener('click', function() {
+                // かわいいピンク系
+                document.getElementById('heartColor').value = '#ff1493';
+                document.getElementById('heartColorPreview').style.backgroundColor = '#ff1493';
+                document.getElementById('bgColor').value = '#ffe6f2';
+                document.getElementById('bgColorPreview').style.backgroundColor = '#ffe6f2';
+                document.getElementById('speed').value = 0.8;
+                document.getElementById('size').value = 1.5;
+                document.getElementById('density').value = 40;
+                document.getElementById('complexity').value = 0.8;
+                
+                params.heartColor = 0xff1493;
+                params.bgColor = 0xffe6f2;
+                params.speed = 0.8;
+                params.size = 1.5;
+                params.density = 40;
+                params.complexity = 0.8;
+                params.filled = true;
+                
+                document.getElementById('speedValue').textContent = params.speed.toFixed(1);
+                document.getElementById('sizeValue').textContent = params.size.toFixed(1);
+                document.getElementById('densityValue').textContent = params.density;
+                document.getElementById('complexityValue').textContent = params.complexity.toFixed(1);
+                
+                scene.background.set(params.bgColor);
+                createInstancedMesh();
+            });
+            
+            document.getElementById('presetDynamic').addEventListener('click', function() {
+                // ダイナミックな赤系
+                document.getElementById('heartColor').value = '#ff0000';
+                document.getElementById('heartColorPreview').style.backgroundColor = '#ff0000';
+                document.getElementById('bgColor').value = '#000000';
+                document.getElementById('bgColorPreview').style.backgroundColor = '#000000';
+                document.getElementById('speed').value = 1.5;
+                document.getElementById('size').value = 1.2;
+                document.getElementById('density').value = 55;
+                document.getElementById('complexity').value = 1.8;
+                
+                params.heartColor = 0xff0000;
+                params.bgColor = 0x000000;
+                params.speed = 1.5;
+                params.size = 1.2;
+                params.density = 55;
+                params.complexity = 1.8;
+                params.filled = false;
+                
+                document.getElementById('speedValue').textContent = params.speed.toFixed(1);
+                document.getElementById('sizeValue').textContent = params.size.toFixed(1);
+                document.getElementById('densityValue').textContent = params.density;
+                document.getElementById('complexityValue').textContent = params.complexity.toFixed(1);
+                
+                scene.background.set(params.bgColor);
+                createInstancedMesh();
+            });
+            
+            document.getElementById('presetDream').addEventListener('click', function() {
+                // 幻想的な青系
+                document.getElementById('heartColor').value = '#00bfff';
+                document.getElementById('heartColorPreview').style.backgroundColor = '#00bfff';
+                document.getElementById('bgColor').value = '#000033';
+                document.getElementById('bgColorPreview').style.backgroundColor = '#000033';
+                document.getElementById('speed').value = 0.5;
+                document.getElementById('size').value = 1.8;
+                document.getElementById('density').value = 50;
+                document.getElementById('complexity').value = 1.2;
+                
+                params.heartColor = 0x00bfff;
+                params.bgColor = 0x000033;
+                params.speed = 0.5;
+                params.size = 1.8;
+                params.density = 50;
+                params.complexity = 1.2;
+                params.filled = true;
+                
+                document.getElementById('speedValue').textContent = params.speed.toFixed(1);
+                document.getElementById('sizeValue').textContent = params.size.toFixed(1);
+                document.getElementById('densityValue').textContent = params.density;
+                document.getElementById('complexityValue').textContent = params.complexity.toFixed(1);
+                
+                scene.background.set(params.bgColor);
+                createInstancedMesh();
+            });
+        }
+        
+        // ウィンドウリサイズの処理
+        window.addEventListener('resize', () => {
+            const newSize = getCanvasSize();
+            renderer.setSize(newSize.width, newSize.height);
+        });
+        
+        // 初期化と実行
+        setupControls();
+        init();
+    </script>
+</body>
+</html>

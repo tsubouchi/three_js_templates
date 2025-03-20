@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>フラクタルシェーダー コントロールパネル</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: "Hiragino Sans", "Meiryo", sans-serif;
+    }
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+    .lil-gui {
+      font-family: "Hiragino Sans", "Meiryo", sans-serif !important;
+    }
+    /* スマホ向け調整 */
+    @media (max-width: 768px) {
+      .lil-gui {
+        --width: 270px;
+        --font-size: 14px;
+      }
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+        "lil-gui": "https://cdn.jsdelivr.net/npm/lil-gui@0.18.2/dist/lil-gui.esm.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <script type="module">
+    import * as THREE from 'three';
+    import GUI from 'lil-gui';
+
+    // シーンのセットアップ
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    
+    // レンダラーセットアップ（9:16 aspect ratio）
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    
+    // パラメータ設定
+    const params = {
+      アニメーション速度: 0.4,
+      回転速度: 0.4,
+      イテレーション: 25,
+      色相強度: 1.0,
+      彩度オフセット: 0.4,
+      明度スケール: 9e2,
+      フラクタルX: 2.7,
+      フラクタルY: 3.95,
+      フラクタルZ: 3.82,
+      Yモジュレーション: 0.104,
+      背景色: [0, 0, 0],
+      リセット: function() {
+        resetToDefaults();
+        updateGUI();
+      }
+    };
+
+    // デフォルト値の保存
+    const defaults = Object.assign({}, params);
+    
+    // シェーダーのソースコード
+    const vertexShader = `
+      varying vec2 vUv;
+      
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.0);
+      }
+    `;
+    
+    const fragmentShader = `
+      uniform float time;
+      uniform vec2 resolution;
+      uniform float animationSpeed;
+      uniform float rotationSpeed;
+      uniform int iterations;
+      uniform float hueIntensity;
+      uniform float saturationOffset;
+      uniform float valueFactor;
+      uniform vec3 fractalConstants;
+      uniform float yModulation;
+      uniform vec3 bgColor;
+      varying vec2 vUv;
+      
+      // 回転行列関数
+      mat2 rotate2D(float angle) {
+        float s = sin(angle);
+        float c = cos(angle);
+        return mat2(c, -s, s, c);
+      }
+      
+      // HSV to RGB 変換
+      vec3 hsv(float h, float s, float v) {
+        vec4 t = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(vec3(h) + t.xyz) * 6.0 - vec3(t.w));
+        return v * mix(vec3(t.x), clamp(p - vec3(t.x), 0.0, 1.0), s);
+      }
+      
+      void main() {
+        // 入力値セットアップ
+        vec2 r = resolution;
+        float t = time * animationSpeed;
+        vec2 FC = vUv * r;  // フラグメント座標
+        vec4 o = vec4(bgColor, 1.0);  // 出力カラー（背景色で初期化）
+        
+        // メインループ
+        for(float i = 0.0, g = 0.0, e = 0.0, s = 0.0; ++i < 119.0;) {
+          vec3 p = vec3((FC.xy - 0.5 * r) / r.y + vec2(0.0, 1.0), g - 1.0);
+          p.zx *= rotate2D(t * rotationSpeed);
+          s = 1.3;
+          
+          // フラクタル変形ループ
+          for(int j = 0; j < iterations; j++) {
+            p = vec3(0.0, fractalConstants.y, -0.7) - 
+                abs(abs(p) * e - vec3(fractalConstants.x, 
+                                      fractalConstants.y + e * yModulation, 
+                                      fractalConstants.z));
+            e = 5.0 / dot(p, p * 0.5);
+            s *= e;
+          }
+          
+          g += p.y / s;
+          s = log(s) - g * 0.5;
+          o.rgb += 0.01 - hsv(hueIntensity / p.z, p.y - saturationOffset, s / valueFactor);
+        }
+        
+        gl_FragColor = vec4(o.rgb, 1.0);
+      }
+    `;
+    
+    // シェーダーマテリアルの作成
+    const uniforms = {
+      time: { value: 0 },
+      resolution: { value: new THREE.Vector2() },
+      animationSpeed: { value: params.アニメーション速度 },
+      rotationSpeed: { value: params.回転速度 },
+      iterations: { value: params.イテレーション },
+      hueIntensity: { value: params.色相強度 },
+      saturationOffset: { value: params.彩度オフセット },
+      valueFactor: { value: params.明度スケール },
+      fractalConstants: { value: new THREE.Vector3(params.フラクタルX, params.フラクタルY, params.フラクタルZ) },
+      yModulation: { value: params.Yモジュレーション },
+      bgColor: { value: new THREE.Color().fromArray(params.背景色.map(c => c / 255)) }
+    };
+    
+    const material = new THREE.ShaderMaterial({
+      vertexShader,
+      fragmentShader,
+      uniforms,
+    });
+    
+    // フルスクリーン用の四角形メッシュ
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+    
+    // GUIの設定
+    const gui = new GUI();
+    gui.title('フラクタルシェーダーコントロール');
+    
+    // アニメーション設定フォルダ
+    const animationFolder = gui.addFolder('アニメーション設定');
+    animationFolder.add(params, 'アニメーション速度', 0, 2).onChange(value => {
+      uniforms.animationSpeed.value = value;
+    });
+    animationFolder.add(params, '回転速度', 0, 2).onChange(value => {
+      uniforms.rotationSpeed.value = value;
+    });
+    animationFolder.add(params, 'イテレーション', 5, 50, 1).onChange(value => {
+      uniforms.iterations.value = value;
+    });
+    
+    // 色彩設定フォルダ
+    const colorFolder = gui.addFolder('色彩設定');
+    colorFolder.add(params, '色相強度', 0.1, 5).onChange(value => {
+      uniforms.hueIntensity.value = value;
+    });
+    colorFolder.add(params, '彩度オフセット', 0, 1).onChange(value => {
+      uniforms.saturationOffset.value = value;
+    });
+    colorFolder.add(params, '明度スケール', 100, 5000).onChange(value => {
+      uniforms.valueFactor.value = value;
+    });
+    colorFolder.addColor(params, '背景色').onChange(value => {
+      uniforms.bgColor.value.fromArray(value.map(c => c / 255));
+    });
+    
+    // フラクタル形状フォルダ
+    const shapeFolder = gui.addFolder('フラクタル形状');
+    shapeFolder.add(params, 'フラクタルX', 1, 5).onChange(value => {
+      uniforms.fractalConstants.value.x = value;
+    });
+    shapeFolder.add(params, 'フラクタルY', 1, 5).onChange(value => {
+      uniforms.fractalConstants.value.y = value;
+    });
+    shapeFolder.add(params, 'フラクタルZ', 1, 5).onChange(value => {
+      uniforms.fractalConstants.value.z = value;
+    });
+    shapeFolder.add(params, 'Yモジュレーション', 0, 0.5).onChange(value => {
+      uniforms.yModulation.value = value;
+    });
+    
+    // リセットボタン
+    gui.add(params, 'リセット');
+    
+    // デフォルト値にリセット
+    function resetToDefaults() {
+      Object.keys(defaults).forEach(key => {
+        if (typeof defaults[key] !== 'function') {
+          params[key] = defaults[key];
+        }
+      });
+      
+      // uniformsを更新
+      uniforms.animationSpeed.value = params.アニメーション速度;
+      uniforms.rotationSpeed.value = params.回転速度;
+      uniforms.iterations.value = params.イテレーション;
+      uniforms.hueIntensity.value = params.色相強度;
+      uniforms.saturationOffset.value = params.彩度オフセット;
+      uniforms.valueFactor.value = params.明度スケール;
+      uniforms.fractalConstants.value.set(params.フラクタルX, params.フラクタルY, params.フラクタルZ);
+      uniforms.yModulation.value = params.Yモジュレーション;
+      uniforms.bgColor.value.fromArray(params.背景色.map(c => c / 255));
+    }
+    
+    // GUIを更新
+    function updateGUI() {
+      for (const controller of gui.controllers) {
+        controller.updateDisplay();
+      }
+      
+      for (const folder of gui.folders) {
+        for (const controller of folder.controllers) {
+          controller.updateDisplay();
+        }
+      }
+    }
+    
+    // GUI を最初は開いておく
+    gui.open();
+    
+    // リサイズハンドラー
+    function onWindowResize() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      // 9:16 のアスペクト比を維持
+      let renderWidth, renderHeight;
+      const targetAspect = 9 / 16;
+      
+      if (width / height > targetAspect) {
+        renderHeight = height;
+        renderWidth = height * targetAspect;
+      } else {
+        renderWidth = width;
+        renderHeight = width / targetAspect;
+      }
+      
+      renderer.setSize(width, height);
+      uniforms.resolution.value.set(renderWidth, renderHeight);
+    }
+    
+    window.addEventListener('resize', onWindowResize);
+    onWindowResize();
+    
+    // アニメーションループ
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // 時間パラメータの更新
+      uniforms.time.value = performance.now() / 1000;
+      
+      renderer.render(scene, camera);
+    }
+    
+    animate();
+  </script>
+</body>
+</html>

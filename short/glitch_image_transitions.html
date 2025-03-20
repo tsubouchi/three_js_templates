@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>グリッチエフェクト画像トランジション</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background-color: #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+    canvas {
+      display: block;
+      max-height: 100vh;
+      max-width: 100vw;
+      aspect-ratio: 9/16;
+    }
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      width: 100%;
+      padding: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      z-index: 100;
+      text-align: center;
+      transition: transform 0.5s ease;
+    }
+    .controls.hidden {
+      transform: translateY(100%);
+    }
+    .upload-btn {
+      background-color: #4285F4;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0 5px;
+      font-size: 14px;
+    }
+    .upload-btn:hover {
+      background-color: #2b6dd4;
+    }
+    .image-preview {
+      display: flex;
+      justify-content: center;
+      margin-top: 10px;
+      gap: 10px;
+      overflow-x: auto;
+      max-width: 100%;
+      padding-bottom: 5px;
+    }
+    .image-preview img {
+      height: 40px;
+      border: 1px solid #444;
+      object-fit: cover;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    .start-btn {
+      background-color: #0F9D58;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0 5px;
+    }
+    .start-btn:hover {
+      background-color: #0b8043;
+    }
+    .clear-btn {
+      background-color: #DB4437;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 0 5px;
+    }
+    .clear-btn:hover {
+      background-color: #c53929;
+    }
+    .info {
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .status {
+      font-size: 12px;
+      margin-top: 5px;
+      color: #aaa;
+    }
+    .glitch-options {
+      margin: 10px 0;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    .option-group {
+      margin: 0 5px;
+    }
+    .option-label {
+      display: block;
+      font-size: 12px;
+      margin-bottom: 3px;
+      text-align: left;
+    }
+    select, input[type="range"] {
+      background-color: #333;
+      color: white;
+      border: 1px solid #555;
+      padding: 4px 8px;
+      border-radius: 4px;
+      width: 120px;
+    }
+    .toggle-controls {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: none;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      font-size: 18px;
+      z-index: 101;
+      opacity: 0.5;
+      transition: opacity 0.3s;
+    }
+    .toggle-controls:hover {
+      opacity: 1;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      margin: 5px 0;
+    }
+    .checkbox-group input {
+      margin-right: 5px;
+    }
+    .option-value {
+      font-size: 10px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <button class="toggle-controls" id="toggleControls">⚙️</button>
+  
+  <div class="controls" id="controlPanel">
+    <div class="info">画像を追加してグリッチエフェクトを楽しもう</div>
+    
+    <div>
+      <input type="file" id="imageUpload" accept="image/*" multiple>
+      <label for="imageUpload" class="upload-btn">画像を選択</label>
+      <button id="startBtn" class="start-btn">開始</button>
+      <button id="clearBtn" class="clear-btn">クリア</button>
+    </div>
+    
+    <div class="glitch-options">
+      <div class="option-group">
+        <label class="option-label">エフェクトタイプ</label>
+        <select id="effectType">
+          <option value="classic">クラシック</option>
+          <option value="digital">デジタル崩壊</option>
+          <option value="analog">アナログノイズ</option>
+          <option value="extreme">極端なグリッチ</option>
+          <option value="minimal">ミニマル</option>
+          <option value="colorLines">カラーライン</option>
+        </select>
+      </div>
+      
+      <div class="option-group">
+        <label class="option-label">RGBシフト強度</label>
+        <input type="range" id="rgbShiftIntensity" min="0" max="100" value="50">
+        <div class="option-value" id="rgbShiftValue">50%</div>
+      </div>
+      
+      <div class="option-group">
+        <label class="option-label">ブロックノイズ量</label>
+        <input type="range" id="blockNoiseAmount" min="0" max="100" value="60">
+        <div class="option-value" id="blockNoiseValue">60%</div>
+      </div>
+      
+      <div class="option-group">
+        <label class="option-label">表示時間(秒)</label>
+        <input type="range" id="displayDuration" min="1" max="10" value="3" step="0.5">
+        <div class="option-value" id="displayDurationValue">3秒</div>
+      </div>
+      
+      <div class="option-group">
+        <label class="option-label">切替時間(秒)</label>
+        <input type="range" id="transitionDuration" min="0.5" max="3" value="1" step="0.1">
+        <div class="option-value" id="transitionDurationValue">1秒</div>
+      </div>
+      
+      <div class="option-group">
+        <label class="option-label">エフェクト遅延(秒)</label>
+        <input type="range" id="effectDelay" min="0" max="2" value="0" step="0.1">
+        <div class="option-value" id="effectDelayValue">0秒</div>
+      </div>
+    </div>
+    
+    <div class="checkbox-group">
+      <input type="checkbox" id="hideControls" checked>
+      <label for="hideControls">再生時にコントロールを非表示</label>
+    </div>
+    
+    <div class="image-preview" id="imagePreview"></div>
+    <div class="status" id="statusMessage">サンプル画像をロード中...</div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // ステータスメッセージ表示用
+    const statusMessage = document.getElementById('statusMessage');
+    const setStatus = (message) => {
+      statusMessage.textContent = message;
+      console.log(message);
+    };
+    
+    // エラーハンドリング
+    window.addEventListener('error', (event) => {
+      setStatus(`エラーが発生しました: ${event.message}`);
+      console.error(event);
+    });
+    
+    // UI要素の取得
+    const uploadInput = document.getElementById('imageUpload');
+    const startBtn = document.getElementById('startBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const imagePreview = document.getElementById('imagePreview');
+    const controlPanel = document.getElementById('controlPanel');
+    const toggleControls = document.getElementById('toggleControls');
+    const hideControlsCheckbox = document.getElementById('hideControls');
+    
+    // エフェクト設定要素
+    const effectTypeSelect = document.getElementById('effectType');
+    const rgbShiftIntensity = document.getElementById('rgbShiftIntensity');
+    const blockNoiseAmount = document.getElementById('blockNoiseAmount');
+    const displayDurationInput = document.getElementById('displayDuration');
+    const transitionDurationInput = document.getElementById('transitionDuration');
+    const effectDelayInput = document.getElementById('effectDelay');
+    
+    // 値表示要素
+    const rgbShiftValue = document.getElementById('rgbShiftValue');
+    const blockNoiseValue = document.getElementById('blockNoiseValue');
+    const displayDurationValue = document.getElementById('displayDurationValue');
+    const transitionDurationValue = document.getElementById('transitionDurationValue');
+    const effectDelayValue = document.getElementById('effectDelayValue');
+    
+    // 値の更新関数
+    const updateValueDisplay = () => {
+      rgbShiftValue.textContent = `${rgbShiftIntensity.value}%`;
+      blockNoiseValue.textContent = `${blockNoiseAmount.value}%`;
+      displayDurationValue.textContent = `${displayDurationInput.value}秒`;
+      transitionDurationValue.textContent = `${transitionDurationInput.value}秒`;
+      effectDelayValue.textContent = `${effectDelayInput.value}秒`;
+    };
+    
+    // 初期値表示
+    updateValueDisplay();
+    
+    // 値変更時にリアルタイム更新
+    rgbShiftIntensity.addEventListener('input', updateValueDisplay);
+    blockNoiseAmount.addEventListener('input', updateValueDisplay);
+    displayDurationInput.addEventListener('input', updateValueDisplay);
+    transitionDurationInput.addEventListener('input', updateValueDisplay);
+    effectDelayInput.addEventListener('input', updateValueDisplay);
+    
+    // コントロールパネルの表示/非表示切り替え
+    toggleControls.addEventListener('click', () => {
+      controlPanel.classList.toggle('hidden');
+    });
+    
+    // アップロードされた画像のURLリスト
+    let uploadedImages = [];
+    let isAnimating = false;
+    let animationId = null;
+    let textures = [];
+    
+    // シーンのセットアップ
+    const scene = new THREE.Scene();
+    
+    // カメラのセットアップ（9:16比率用）
+    const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5 * (16/9), -0.5 * (16/9), 0.1, 1000);
+    camera.position.z = 1;
+    
+    // レンダラーのセットアップ
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    
+    // キャンバスのアスペクト比を9:16に維持
+    const adjustCanvasSize = () => {
+      try {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        const aspectRatio = 9 / 16;
+        
+        let newWidth, newHeight;
+        
+        if (width / height > aspectRatio) {
+          // 画面が広い場合、高さに合わせる
+          newHeight = height;
+          newWidth = height * aspectRatio;
+        } else {
+          // 画面が狭い場合、幅に合わせる
+          newWidth = width;
+          newHeight = width / aspectRatio;
+        }
+        
+        renderer.setSize(newWidth, newHeight);
+      } catch (e) {
+        console.error("サイズ調整エラー:", e);
+        setStatus(`サイズ調整エラー: ${e.message}`);
+      }
+    };
+    
+    adjustCanvasSize();
+    window.addEventListener('resize', adjustCanvasSize);
+    
+    // デモ用サンプル画像
+    const sampleImages = [
+      'https://picsum.photos/id/237/600/1066',
+      'https://picsum.photos/id/238/600/1066',
+      'https://picsum.photos/id/239/600/1066',
+      'https://picsum.photos/id/240/600/1066'
+    ];
+    
+    // 画像ファイルをDataURLに変換
+    const fileToDataURL = (file) => {
+      return new Promise((resolve, reject) => {
+        try {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(file);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    };
+    
+    // 画像アップロードイベント
+    uploadInput.addEventListener('change', async (e) => {
+      try {
+        const files = e.target.files;
+        if (files.length === 0) return;
+        
+        setStatus(`${files.length}枚の画像を処理中...`);
+        uploadedImages = [];
+        imagePreview.innerHTML = '';
+        
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!file.type.match('image.*')) {
+            setStatus(`警告: ${file.name}は画像ファイルではありません。`);
+            continue;
+          }
+          
+          try {
+            const dataURL = await fileToDataURL(file);
+            uploadedImages.push(dataURL);
+            
+            // プレビューに追加
+            const img = document.createElement('img');
+            img.src = dataURL;
+            imagePreview.appendChild(img);
+          } catch (err) {
+            console.error(`画像 ${file.name} の処理中にエラー:`, err);
+            setStatus(`画像の処理中にエラーが発生しました: ${err.message}`);
+          }
+        }
+        
+        setStatus(`${uploadedImages.length}枚の画像が準備できました`);
+      } catch (e) {
+        console.error("アップロードエラー:", e);
+        setStatus(`アップロードエラー: ${e.message}`);
+      }
+    });
+    
+    // 画像クリアボタン
+    clearBtn.addEventListener('click', () => {
+      try {
+        uploadedImages = [];
+        imagePreview.innerHTML = '';
+        setStatus('画像がクリアされました');
+        
+        // アニメーション停止
+        stopAnimation();
+        
+        // コントロールパネルを表示
+        controlPanel.classList.remove('hidden');
+        
+        // サンプル画像を再ロード
+        loadSampleTextures();
+      } catch (e) {
+        console.error("クリアエラー:", e);
+        setStatus(`クリアエラー: ${e.message}`);
+      }
+    });
+    
+    // アニメーション停止
+    const stopAnimation = () => {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+      isAnimating = false;
+      scene.clear();
+    };
+    
+    // 開始ボタン
+    startBtn.addEventListener('click', () => {
+      try {
+        // アニメーション停止
+        stopAnimation();
+        
+        let imagesToUse = uploadedImages.length >= 2 ? uploadedImages : sampleImages;
+        
+        if (imagesToUse.length < 2) {
+          setStatus('エラー: 少なくとも2枚の画像が必要です');
+          return;
+        }
+        
+        // コントロールを非表示にするオプションが有効なら非表示
+        if (hideControlsCheckbox.checked) {
+          controlPanel.classList.add('hidden');
+        }
+        
+        setStatus(`${imagesToUse.length}枚の画像でアニメーションを開始します...`);
+        loadTextures(imagesToUse);
+      } catch (e) {
+        console.error("開始エラー:", e);
+        setStatus(`開始エラー: ${e.message}`);
+      }
+    });
+    
+    // グリッチエフェクトのプリセット
+    const effectPresets = {
+      classic: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          // ランダム関数
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          // グリッチブロック
+          vec4 glitchBlock(vec2 uv, sampler2D tex, float block_size) {
+            float noise = random(floor(uv * block_size) + vec2(time, 0.0));
+            if (noise > 0.95) {
+              vec2 offset = vec2(noise - 0.5, 0.0) * 0.1 * intensity * blockNoiseFactor;
+              return texture2D(tex, uv + offset);
+            }
+            return texture2D(tex, uv);
+          }
+          
+          // RGBシフト
+          vec4 rgbShift(sampler2D tex, vec2 uv) {
+            float amount = 0.005 * intensity * rgbShiftFactor;
+            vec2 rUv = uv + vec2(amount, 0.0);
+            vec2 gUv = uv;
+            vec2 bUv = uv - vec2(amount, 0.0);
+            
+            float r = texture2D(tex, rUv).r;
+            float g = texture2D(tex, gUv).g;
+            float b = texture2D(tex, bUv).b;
+            
+            return vec4(r, g, b, 1.0);
+          }
+          
+          // スキャンライン
+          float scanLine(vec2 uv) {
+            return 0.5 + 0.5 * sin(uv.y * 500.0 + time * 10.0);
+          }
+          
+          // ノイズ
+          float noise(vec2 uv) {
+            return random(uv + vec2(time, 0.0));
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // グリッチノイズの計算
+            float noiseVal = noise(uv);
+            
+            // エフェクト強度が十分な場合のみエフェクト適用
+            if (effectiveIntensity > 0.05) {
+              // 歪み（より強いグリッチ効果のため）
+              vec2 distortion = vec2(
+                sin(uv.y * 50.0 + time * 2.0) * 0.001,
+                sin(uv.x * 40.0 + time * 3.0) * 0.001
+              ) * effectiveIntensity;
+              
+              // UVの歪み
+              vec2 glitchUv = uv + distortion;
+              
+              // スキャンラインの追加
+              float scanVal = scanLine(glitchUv);
+              scanVal = mix(1.0, scanVal, 0.3 * effectiveIntensity);
+              
+              // 現在と次のテクスチャのグリッチブロック効果
+              current = glitchBlock(glitchUv, tCurrent, 20.0 * effectiveIntensity);
+              next = glitchBlock(glitchUv, tNext, 20.0 * effectiveIntensity);
+              
+              // トランジション中にエフェクトを強化
+              current = rgbShift(tCurrent, glitchUv);
+              next = rgbShift(tNext, glitchUv);
+              
+              // 2つのテクスチャのブレンド
+              color = mix(current, next, delayedProgress);
+              
+              // スキャンラインでグリッチ効果を強調
+              color.rgb *= scanVal;
+              
+              // ノイズを追加
+              if (effectiveIntensity > 0.5 && noiseVal > 0.97) {
+                color.rgb += vec3(0.1, 0.1, 0.1) * effectiveIntensity;
+              }
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      },
+      digital: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          float noise(vec2 p) {
+            return random(p);
+          }
+          
+          // デジタルノイズブロック
+          vec4 digitalNoise(vec2 uv, sampler2D tex) {
+            float blockSize = 30.0 * blockNoiseFactor;
+            vec2 blockUv = floor(uv * blockSize) / blockSize;
+            
+            float timeOffset = floor(time * 10.0) / 10.0;
+            float r = random(blockUv + timeOffset);
+            
+            if (r > 0.95 - 0.3 * intensity) {
+              vec2 shift = vec2(
+                (random(blockUv + 0.1) - 0.5) * 0.2,
+                (random(blockUv + 0.2) - 0.5) * 0.1
+              ) * intensity * blockNoiseFactor;
+              
+              return texture2D(tex, uv + shift);
+            } else if (r > 0.9 - 0.3 * intensity) {
+              // デジタル的に色を反転
+              vec4 color = texture2D(tex, uv);
+              return vec4(1.0 - color.rgb, color.a);
+            }
+            
+            return texture2D(tex, uv);
+          }
+          
+          // ビット崩壊エフェクト
+          vec4 bitCrush(sampler2D tex, vec2 uv) {
+            float bitDepth = 5.0 + 3.0 * (1.0 - intensity);
+            vec4 color = texture2D(tex, uv);
+            color = floor(color * bitDepth) / bitDepth;
+            
+            // RGBシフト
+            float amount = 0.006 * intensity * rgbShiftFactor;
+            if (random(uv + time) > 0.7) amount *= 2.0;
+            
+            float r = texture2D(tex, uv + vec2(amount, 0.0)).r;
+            float g = color.g;
+            float b = texture2D(tex, uv - vec2(amount, 0.0)).b;
+            
+            return vec4(r, g, b, color.a);
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // エフェクト強度が十分な場合のみエフェクト適用
+            if (effectiveIntensity > 0.05) {
+              // ピクセル化効果（強度に依存）
+              float pixelSize = mix(1.0, 3.0, effectiveIntensity * 0.3);
+              vec2 pixelUv = floor(uv * 500.0 / pixelSize) * pixelSize / 500.0;
+              
+              // ランダムな縦ブロックシフト
+              float blockHeight = 0.1;
+              float blockOffset = floor(uv.y / blockHeight);
+              float chance = random(vec2(blockOffset, time));
+              
+              if (chance > 0.95) {
+                uv.x += (random(vec2(blockOffset, time * 0.5)) - 0.5) * 0.05 * effectiveIntensity;
+              }
+              
+              // ランダムでライン抜け
+              float lineChance = random(vec2(floor(uv.y * 100.0), time));
+              if (lineChance > 0.99 - effectiveIntensity * 0.1) {
+                uv.y += 0.01 * random(vec2(uv.x, time));
+              }
+              
+              // デジタルノイズ適用
+              current = digitalNoise(uv, tCurrent);
+              next = digitalNoise(uv, tNext);
+              
+              // トランジション中は強いビット崩壊
+              if (effectiveIntensity > 0.3) {
+                current = bitCrush(tCurrent, uv);
+                next = bitCrush(tNext, uv);
+              }
+              
+              // ブレンド
+              color = mix(current, next, delayedProgress);
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      },
+      analog: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          // ランダム関数
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          // ビデオノイズ
+          float videoNoise(vec2 uv) {
+            float noise = random(uv * 10.0 + time);
+            return noise;
+          }
+          
+          // VHSスタイルのラインノイズ
+          float lineNoise(vec2 uv) {
+            float n = random(vec2(floor(uv.y * 100.0), time)) * blockNoiseFactor;
+            return n;
+          }
+          
+          // VHSトラッキングノイズ
+          vec2 trackingNoise(vec2 uv) {
+            float y = uv.y;
+            float t = time * 0.5;
+            
+            // ランダムなホリゾンタルシフト
+            float noise = 0.0;
+            
+            if (random(vec2(t, uv.y)) > 0.98) {
+              noise = (random(vec2(t, uv.y)) - 0.5) * 0.1 * intensity * blockNoiseFactor;
+            }
+            
+            // トラッキングラインのズレ
+            if (random(vec2(t)) > 0.8) {
+              float jitter = random(vec2(t)) * 0.01 * intensity;
+              y = fract(y + jitter);
+            }
+            
+            return vec2(uv.x + noise, y);
+          }
+          
+          // カラーブリーディング
+          vec4 colorBleeding(sampler2D tex, vec2 uv) {
+            float amount = 0.01 * intensity * rgbShiftFactor;
+            
+            float r = texture2D(tex, uv + vec2(amount, 0.0)).r;
+            float g = texture2D(tex, uv).g;
+            float b = texture2D(tex, uv - vec2(amount, 0.0)).b;
+            
+            // 少しアナログっぽい色にする
+            return vec4(
+              mix(r, 0.8, 0.05),
+              mix(g, 0.8, 0.05),
+              mix(b, 0.8, 0.05),
+              1.0
+            );
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // エフェクト強度が十分な場合のみエフェクト適用
+            if (effectiveIntensity > 0.05) {
+              // ビデオテープ風の歪み
+              float distort = sin(uv.y * 20.0 + time) * 0.001 * effectiveIntensity;
+              uv.x += distort;
+              
+              // トラッキングノイズ適用
+              uv = trackingNoise(uv);
+              
+              // 現在と次のテクスチャに効果適用
+              current = colorBleeding(tCurrent, uv);
+              next = colorBleeding(tNext, uv);
+              
+              // 画像ブレンド
+              color = mix(current, next, delayedProgress);
+              
+              // ラインノイズ
+              float ln = lineNoise(uv);
+              if (ln > 0.8) {
+                color.rgb += vec3(ln) * 0.2 * effectiveIntensity;
+              }
+              
+              // VHSスキャンライン
+              float scanLine = 0.9 + 0.1 * sin(uv.y * 800.0);
+              color.rgb *= mix(1.0, scanLine, 0.2 * effectiveIntensity);
+              
+              // ランダムなフリッカー
+              float flicker = 0.95 + 0.05 * sin(time * 30.0);
+              color.rgb *= flicker;
+              
+              // 全体的なノイズ
+              float noise = videoNoise(uv) * 0.05 * effectiveIntensity;
+              color.rgb += vec3(noise);
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      },
+      extreme: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          vec4 extremeGlitch(vec2 uv, sampler2D tex) {
+            // 基本テクスチャカラー
+            vec4 baseColor = texture2D(tex, uv);
+            
+            // 強いRGBシフト
+            float rgbAmount = 0.02 * intensity * rgbShiftFactor;
+            float r = texture2D(tex, uv + vec2(rgbAmount, 0.0)).r;
+            float g = texture2D(tex, uv).g;
+            float b = texture2D(tex, uv - vec2(rgbAmount, 0.0)).b;
+            
+            vec4 color = vec4(r, g, b, baseColor.a);
+            
+            // ブロックノイズ
+            float blockSize = 20.0 * blockNoiseFactor;
+            vec2 blockPos = floor(uv * blockSize) / blockSize;
+            float blockRandom = random(blockPos + vec2(time * 0.1, 0.0));
+            
+            if (blockRandom > 0.85) {
+              // ランダムなブロックのシフト
+              vec2 shift = vec2(
+                (random(blockPos + vec2(0.0, time * 0.2)) - 0.5) * 0.1,
+                (random(blockPos + vec2(time * 0.3, 0.0)) - 0.5) * 0.05
+              ) * intensity;
+              
+              return texture2D(tex, uv + shift);
+            }
+            
+            return color;
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // エフェクト強度が十分な場合のみエフェクト適用
+            if (effectiveIntensity > 0.05) {
+              // 波状歪み
+              float waveX = sin(uv.y * 20.0 + time * 2.0) * 0.003 * effectiveIntensity;
+              float waveY = sin(uv.x * 15.0 - time * 3.0) * 0.003 * effectiveIntensity;
+              vec2 distortedUv = uv + vec2(waveX, waveY);
+              
+              // 大きなブロックのシフト
+              float blockHeight = 0.1;
+              float blockIndex = floor(uv.y / blockHeight);
+              if (random(vec2(blockIndex, floor(time * 5.0))) > 0.9) {
+                distortedUv.x += (random(vec2(blockIndex, time)) - 0.5) * 0.1 * effectiveIntensity;
+              }
+              
+              // 時々縦ラインが乱れる
+              if (random(vec2(floor(time * 10.0))) > 0.95) {
+                float lineWidth = 0.01 + random(vec2(time)) * 0.02;
+                float linePos = random(vec2(time * 0.5));
+                if (abs(uv.x - linePos) < lineWidth) {
+                  distortedUv.y += sin(uv.y * 50.0 + time * 20.0) * 0.1 * effectiveIntensity;
+                }
+              }
+              
+              // 極端なグリッチエフェクト適用
+              current = extremeGlitch(distortedUv, tCurrent);
+              next = extremeGlitch(distortedUv, tNext);
+              
+              // ブレンド
+              color = mix(current, next, delayedProgress);
+              
+              // ノイズ追加
+              float noiseAmount = 0.05 * effectiveIntensity;
+              float noiseValue = random(uv + vec2(time * 0.1, 0.0));
+              color.rgb += vec3(noiseValue) * noiseAmount;
+              
+              // 時々色反転
+              if (random(vec2(floor(time * 0.5))) > 0.95) {
+                color.rgb = mix(color.rgb, 1.0 - color.rgb, 0.5 * effectiveIntensity);
+              }
+              
+              // スキャンラインノイズ
+              float scanline = abs(sin(uv.y * 100.0 + time * 10.0));
+              if (scanline > 0.97) {
+                color.rgb += vec3(0.1) * effectiveIntensity;
+              }
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      },
+      minimal: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          // 簡易ランダム関数
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          // 軽度のRGBシフト
+          vec4 subtleRGBShift(sampler2D tex, vec2 uv) {
+            float amount = 0.003 * intensity * rgbShiftFactor;
+            vec2 rUv = uv + vec2(amount, 0.0);
+            vec2 gUv = uv;
+            vec2 bUv = uv - vec2(amount, 0.0);
+            
+            float r = texture2D(tex, rUv).r;
+            float g = texture2D(tex, gUv).g;
+            float b = texture2D(tex, bUv).b;
+            
+            return vec4(r, g, b, 1.0);
+          }
+          
+          // シンプルな線形ブレンド
+          vec4 simpleBlend(sampler2D texA, sampler2D texB, vec2 uv, float t) {
+            vec4 colorA = texture2D(texA, uv);
+            vec4 colorB = texture2D(texB, uv);
+            return mix(colorA, colorB, t);
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // 通常表示（エフェクトなし）
+            if (effectiveIntensity < 0.05) {
+              color = simpleBlend(tCurrent, tNext, uv, delayedProgress);
+            } 
+            // エフェクト強度が十分な場合のみエフェクト適用
+            else {
+              // 軽度の歪み
+              float distortion = sin(uv.y * 10.0 + time) * 0.0005 * effectiveIntensity;
+              vec2 distortedUv = uv + vec2(distortion, 0.0);
+              
+              // 軽度のRGBシフト
+              vec4 currentColor = subtleRGBShift(tCurrent, distortedUv);
+              vec4 nextColor = subtleRGBShift(tNext, distortedUv);
+              
+              color = mix(currentColor, nextColor, delayedProgress);
+              
+              // 時々薄いスキャンライン
+              float scanLine = 0.98 + 0.02 * sin(uv.y * 400.0);
+              color.rgb *= mix(1.0, scanLine, effectiveIntensity * 0.5);
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      },
+      colorLines: {
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform sampler2D tCurrent;
+          uniform sampler2D tNext;
+          uniform float progress;
+          uniform float time;
+          uniform float intensity;
+          uniform float rgbShiftFactor;
+          uniform float blockNoiseFactor;
+          uniform float effectDelay;
+          
+          varying vec2 vUv;
+          
+          // ランダム関数
+          float random(vec2 st) {
+            return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+          }
+          
+          // HSV to RGB変換
+          vec3 hsv2rgb(vec3 c) {
+            vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+            vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+            return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+          }
+          
+          // カラフルラインエフェクト
+          vec4 colorLineEffect(vec2 uv, sampler2D tex, float strength) {
+            // 元の画像
+            vec4 original = texture2D(tex, uv);
+            
+            // ライン分割数
+            float lineCount = 200.0 + (sin(time) * 0.5 + 0.5) * 100.0;
+            
+            // 水平ラインの作成
+            float lineY = floor(uv.y * lineCount) / lineCount;
+            
+            // 各ラインごとに色相を変化
+            float hue = fract(lineY * 5.0 + time * 0.1);
+            vec3 lineColor = hsv2rgb(vec3(hue, 0.8, 1.0));
+            
+            // ランダムシフト
+            float lineRand = random(vec2(lineY, time * 0.01));
+            float xShift = (lineRand - 0.5) * 0.01 * strength;
+            
+            // シフト適用
+            vec2 shiftedUv = vec2(uv.x + xShift, uv.y);
+            vec4 shiftedTex = texture2D(tex, shiftedUv);
+            
+            // RGBシフト
+            float rgbAmount = 0.005 * strength * rgbShiftFactor;
+            float r = texture2D(tex, vec2(uv.x + rgbAmount, uv.y)).r;
+            float g = shiftedTex.g;
+            float b = texture2D(tex, vec2(uv.x - rgbAmount, uv.y)).b;
+            
+            // オリジナルとラインカラーのブレンド
+            vec4 result = vec4(
+              mix(vec3(r, g, b), lineColor, 0.2 * strength),
+              shiftedTex.a
+            );
+            
+            // 時々ラインを強調
+            if (lineRand > 0.97) {
+              result.rgb = mix(result.rgb, lineColor, 0.5 * strength);
+            }
+            
+            return result;
+          }
+          
+          void main() {
+            vec2 uv = vUv;
+            
+            // デフォルト効果なし画像
+            vec4 current = texture2D(tCurrent, uv);
+            vec4 next = texture2D(tNext, uv);
+            vec4 color = mix(current, next, progress);
+            
+            // エフェクト強度計算（遅延を考慮）
+            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
+            float effectiveIntensity = intensity;
+            
+            // エフェクト強度が十分な場合のみエフェクト適用
+            if (effectiveIntensity > 0.05) {
+              // カラーラインエフェクト適用
+              current = colorLineEffect(uv, tCurrent, effectiveIntensity);
+              next = colorLineEffect(uv, tNext, effectiveIntensity);
+              
+              // 時々縦方向にブレを強化
+              float verticalBlur = 0.0;
+              if (random(vec2(floor(time * 2.0))) > 0.8) {
+                verticalBlur = 0.01 * effectiveIntensity;
+                float blurSample = 5.0;
+                vec4 blurredCurrent = vec4(0.0);
+                vec4 blurredNext = vec4(0.0);
+                
+                for (float i = -2.0; i <= 2.0; i += 1.0) {
+                  vec2 blurUv = uv + vec2(0.0, i * verticalBlur);
+                  blurredCurrent += colorLineEffect(blurUv, tCurrent, effectiveIntensity) / blurSample;
+                  blurredNext += colorLineEffect(blurUv, tNext, effectiveIntensity) / blurSample;
+                }
+                
+                current = mix(current, blurredCurrent, 0.5);
+                next = mix(next, blurredNext, 0.5);
+              }
+              
+              // オリジナルブレンド
+              color = mix(current, next, delayedProgress);
+              
+              // ノイズ追加
+              float noiseVal = random(uv + vec2(time * 0.1, 0.0));
+              if (noiseVal > 0.97) {
+                color.rgb += vec3(0.1) * effectiveIntensity;
+              }
+            }
+            
+            gl_FragColor = color;
+          }
+        `
+      }
+    };
+    
+    // 画像のロード（URLリストから）
+    const loadTextures = async (imageSources) => {
+      try {
+        // テクスチャ配列をクリア
+        textures = [];
+        
+        setStatus('画像をロード中...');
+        
+        const textureLoader = new THREE.TextureLoader();
+        const promises = imageSources.map((src, index) => {
+          return new Promise((resolve, reject) => {
+            textureLoader.load(
+              src, 
+              (texture) => {
+                setStatus(`画像 ${index + 1}/${imageSources.length} をロードしました`);
+                resolve(texture);
+              },
+              undefined,
+              (err) => {
+                console.error(`画像 ${index + 1} のロードに失敗:`, err);
+                setStatus(`画像のロードに失敗しました: ${err.message}`);
+                reject(err);
+              }
+            );
+          });
+        });
+        
+        try {
+          const loadedTextures = await Promise.all(promises);
+          textures = loadedTextures;
+          
+          if (textures.length >= 2) {
+            setStatus(`${textures.length}枚の画像を準備完了！`);
+            setupScene();
+          } else {
+            setStatus('エラー: 十分な画像がロードできませんでした');
+          }
+        } catch (err) {
+          console.error("テクスチャのロードに失敗:", err);
+          setStatus(`テクスチャのロードに失敗しました: ${err.message}`);
+        }
+      } catch (e) {
+        console.error("テクスチャロードエラー:", e);
+        setStatus(`テクスチャロードエラー: ${e.message}`);
+      }
+    };
+    
+    // サンプル画像を読み込む
+    const loadSampleTextures = () => {
+      try {
+        setStatus('サンプル画像をロード中...');
+        
+        // サンプル画像のプレビューを表示
+        imagePreview.innerHTML = '';
+        sampleImages.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          imagePreview.appendChild(img);
+        });
+        
+        // サンプル画像をロード
+        loadTextures(sampleImages);
+      } catch (e) {
+        console.error("サンプルロードエラー:", e);
+        setStatus(`サンプルロードエラー: ${e.message}`);
+      }
+    };
+    
+    // グリッチシェーダーのためのマテリアル作成
+    let glitchMaterial;
+    const setupScene = () => {
+      try {
+        // シーンをクリア
+        scene.clear();
+        
+        setStatus('シーンをセットアップ中...');
+        
+        // 選択されたエフェクトタイプの取得
+        const effectType = effectTypeSelect.value;
+        const effectPreset = effectPresets[effectType];
+        
+        // シェーダーマテリアル
+        glitchMaterial = new THREE.ShaderMaterial({
+          uniforms: {
+            tCurrent: { value: textures[0] },
+            tNext: { value: textures[1] },
+            progress: { value: 0.0 },
+            time: { value: 0.0 },
+            intensity: { value: 0.0 },
+            rgbShiftFactor: { value: rgbShiftIntensity.value / 100 },
+            blockNoiseFactor: { value: blockNoiseAmount.value / 100 },
+            effectDelay: { value: parseFloat(effectDelayInput.value) }
+          },
+          vertexShader: effectPreset.vertexShader,
+          fragmentShader: effectPreset.fragmentShader
+        });
+        
+        // 平面ジオメトリ
+        const geometry = new THREE.PlaneGeometry(1, 16/9);
+        const mesh = new THREE.Mesh(geometry, glitchMaterial);
+        scene.add(mesh);
+        
+        // アニメーション状態をリセット
+        animationState.currentIndex = 0;
+        animationState.nextIndex = 1;
+        animationState.isTransitioning = false;
+        animationState.progress = 0;
+        animationState.transitionTimer = 0;
+        animationState.displayTimer = 0;
+        
+        // 設定から表示時間と切替時間を取得
+        animationState.displayDuration = parseFloat(displayDurationInput.value);
+        animationState.transitionDuration = parseFloat(transitionDurationInput.value);
+        animationState.effectDelay = parseFloat(effectDelayInput.value);
+        
+        // クロックをリセット
+        clock.start();
+        previousTime = 0;
+        
+        // アニメーション開始
+        isAnimating = true;
+        setStatus(`アニメーション開始！(${effectType}モード)`);
+        animate();
+      } catch (e) {
+        console.error("シーンセットアップエラー:", e);
+        setStatus(`シーンセットアップエラー: ${e.message}`);
+      }
+    };
+    
+    // エフェクト設定の更新（リアルタイム反映）
+    const updateEffectSettings = () => {
+      if (glitchMaterial) {
+        glitchMaterial.uniforms.rgbShiftFactor.value = rgbShiftIntensity.value / 100;
+        glitchMaterial.uniforms.blockNoiseFactor.value = blockNoiseAmount.value / 100;
+        glitchMaterial.uniforms.effectDelay.value = parseFloat(effectDelayInput.value);
+        updateValueDisplay();
+      }
+    };
+    
+    // スライダー変更イベント
+    rgbShiftIntensity.addEventListener('input', updateEffectSettings);
+    blockNoiseAmount.addEventListener('input', updateEffectSettings);
+    effectDelayInput.addEventListener('input', updateEffectSettings);
+    
+    // アニメーションの状態管理
+    const animationState = {
+      currentIndex: 0,
+      nextIndex: 1,
+      transitionDuration: 1.0, // トランジション時間（秒）
+      displayDuration: 3.0,    // 各画像の表示時間（秒）
+      effectDelay: 0.0,        // エフェクト開始遅延（秒）
+      isTransitioning: false,
+      progress: 0,
+      transitionTimer: 0,
+      displayTimer: 0
+    };
+    
+    // アニメーションループ
+    const clock = new THREE.Clock();
+    let previousTime = 0;
+    
+    const animate = () => {
+      try {
+        if (!isAnimating) return;
+        
+        animationId = requestAnimationFrame(animate);
+        
+        const elapsedTime = clock.getElapsedTime();
+        const deltaTime = elapsedTime - previousTime;
+        previousTime = elapsedTime;
+        
+        // シーンに何もなければ終了
+        if (scene.children.length === 0 || !glitchMaterial) {
+          console.warn("シーンが空またはマテリアルが設定されていません");
+          return;
+        }
+        
+        // 時間の更新
+        glitchMaterial.uniforms.time.value = elapsedTime;
+        
+        // トランジション状態の更新
+        if (animationState.isTransitioning) {
+          // トランジション中
+          animationState.transitionTimer += deltaTime;
+          animationState.progress = Math.min(
+            animationState.transitionTimer / animationState.transitionDuration, 
+            1.0
+          );
+          
+          // グリッチ強度の更新（トランジション中に強く、始まりと終わりで弱く）
+          const intensity = Math.sin(animationState.progress * Math.PI);
+          glitchMaterial.uniforms.intensity.value = intensity;
+          glitchMaterial.uniforms.progress.value = animationState.progress;
+          
+          // トランジション完了
+          if (animationState.progress >= 1.0) {
+            animationState.isTransitioning = false;
+            animationState.displayTimer = 0;
+            animationState.currentIndex = animationState.nextIndex;
+            animationState.nextIndex = (animationState.nextIndex + 1) % textures.length;
+            glitchMaterial.uniforms.tCurrent.value = textures[animationState.currentIndex];
+            glitchMaterial.uniforms.tNext.value = textures[animationState.nextIndex];
+            glitchMaterial.uniforms.progress.value = 0;
+          }
+        } else {
+          // 表示中
+          animationState.displayTimer += deltaTime;
+          
+          // 常に少しグリッチ効果を入れる（弱め）
+          let randomIntensity = 0.02 + 0.05 * Math.sin(elapsedTime * 2.0);
+          // ランダムな強いグリッチのスパイク
+          if (Math.random() > 0.995) {
+            randomIntensity = 0.2 + Math.random() * 0.2;
+          }
+          glitchMaterial.uniforms.intensity.value = randomIntensity;
+          
+          // 表示時間が経過したらトランジション開始
+          if (animationState.displayTimer >= animationState.displayDuration) {
+            animationState.isTransitioning = true;
+            animationState.transitionTimer = 0;
+            animationState.progress = 0;
+          }
+        }
+        
+        renderer.render(scene, camera);
+      } catch (e) {
+        console.error("アニメーションエラー:", e);
+        setStatus(`アニメーションエラー: ${e.message}`);
+        stopAnimation();
+      }
+    };
+    
+    // キーボードショートカット
+    document.addEventListener('keydown', (e) => {
+      // ESCキーでコントロールパネル表示/非表示切り替え
+      if (e.key === 'Escape') {
+        controlPanel.classList.toggle('hidden');
+      }
+    });
+    
+    // タッチ操作のサポート
+    let touchStartY;
+    document.addEventListener('touchstart', (e) => {
+      touchStartY = e.touches[0].clientY;
+    });
+    
+    document.addEventListener('touchend', (e) => {
+      const touchEndY = e.changedTouches[0].clientY;
+      const diff = touchEndY - touchStartY;
+      
+      // 上から下へのスワイプでコントロール表示
+      if (diff > 100 && controlPanel.classList.contains('hidden')) {
+        controlPanel.classList.remove('hidden');
+      }
+      // 下から上へのスワイプでコントロール非表示
+      else if (diff < -100 && !controlPanel.classList.contains('hidden')) {
+        controlPanel.classList.add('hidden');
+      }
+    });
+    
+    // 最初のページロード時にはサンプル画像を読み込む
+    loadSampleTextures();
+  </script>
+</body>
+</html>
