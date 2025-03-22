@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルスライド生成</title>
+    <style>
+        :root {
+            --primary-color: #0078d4;
+            --secondary-color: #106ebe;
+            --accent-color: #ffaa44;
+            --dark-bg: #1a1a1a;
+            --darker-bg: #121212;
+            --light-text: #f5f5f5;
+            --panel-bg: rgba(30, 30, 30, 0.95);
+            --border-color: #444;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body { 
+            margin: 0; 
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--light-text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .top-bar {
+            height: 60px;
+            background-color: var(--darker-bg);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+        
+        .app-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        .content-container {
+            display: flex;
+            flex-grow: 1;
+            position: relative;
+        }
+        
+        .text-panel {
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--panel-bg);
+        }
+        
+        .text-panel.side-panel {
+            position: absolute;
+            right: 0;
+            width: 400px;
+            height: 100%;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
+            overflow-y: auto;
+            z-index: 10;
+            transform: translateX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .text-panel.side-panel.collapsed {
+            transform: translateX(400px);
+        }
+        
+        .panel-header {
+            margin-bottom: 20px;
+        }
+        
+        .panel-title {
+            font-size: 24px;
+            margin-bottom: 5px;
+            color: var(--primary-color);
+        }
+        
+        .panel-subtitle {
+            font-size: 14px;
+            color: #aaa;
+        }
+        
+        .textarea-container {
+            margin-bottom: 20px;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .textarea-label {
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        #input-text {
+            width: 100%;
+            height: 100%;
+            min-height: 300px;
+            background-color: rgba(0, 0, 0, 0.2);
+            color: var(--light-text);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: inherit;
+            resize: none;
+            flex-grow: 1;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        
+        #instruction-text {
+            width: 100%;
+            min-height: 80px;
+            background-color: rgba(0, 0, 0, 0.2);
+            color: var(--light-text);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: inherit;
+            resize: none;
+            font-size: 15px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        
+        .settings-group {
+            background-color: rgba(0, 0, 0, 0.2);
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .settings-group h3 {
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: var(--primary-color);
+        }
+        
+        .setting-item {
+            margin-bottom: 12px;
+        }
+        
+        .setting-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .setting-item select,
+        .setting-item input[type="color"] {
+            width: 100%;
+            padding: 8px;
+            background-color: var(--darker-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--light-text);
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            flex: 1;
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .btn:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-secondary {
+            background-color: #444;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #555;
+        }
+        
+        /* スライド表示エリア */
+        .slide-view {
+            flex-grow: 1;
+            position: relative;
+            display: none;
+        }
+        
+        .slide-view.active {
+            display: block;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* スライドコントロール */
+        .slide-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            background-color: var(--panel-bg);
+            padding: 10px 15px;
+            border-radius: 8px;
+            z-index: 5;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .slide-nav {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .nav-btn {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+        
+        .nav-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .slide-number {
+            font-size: 14px;
+            min-width: 80px;
+            text-align: center;
+        }
+        
+        /* サムネイル */
+        .slide-thumbnails {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 120px;
+            max-height: 80vh;
+            overflow-y: auto;
+            background-color: var(--panel-bg);
+            border-radius: 8px;
+            padding: 10px;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .thumbnail {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background-color: #333;
+            border-radius: 4px;
+            cursor: pointer;
+            overflow: hidden;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .thumbnail.active {
+            border-color: var(--primary-color);
+        }
+        
+        .thumbnail:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        /* パネル切り替えボタン */
+        .toggle-panel {
+            position: absolute;
+            top: 50%;
+            right: 400px;
+            transform: translateY(-50%);
+            background-color: var(--panel-bg);
+            border: none;
+            border-radius: 4px 0 0 4px;
+            padding: 15px 5px;
+            color: var(--light-text);
+            cursor: pointer;
+            z-index: 10;
+            transition: right 0.3s ease;
+            display: none;
+        }
+        
+        .toggle-panel.active {
+            display: block;
+        }
+        
+        .toggle-panel.collapsed {
+            right: 0;
+        }
+        
+        /* ローディングオーバーレイ */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.2);
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: white;
+            font-size: 18px;
+        }
+        
+        /* 非表示コンテナ */
+        .thumbnail-container {
+            display: none;
+        }
+        
+        /* レスポンシブスタイル */
+        @media (max-width: 768px) {
+            .text-panel.side-panel {
+                width: 100%;
+            }
+            
+            .toggle-panel {
+                right: 100%;
+            }
+            
+            .toggle-panel.collapsed {
+                right: 0;
+            }
+            
+            .slide-thumbnails {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- トップバー -->
+    <div class="top-bar">
+        <div class="app-title">シンプルスライド生成</div>
+    </div>
+    
+    <!-- メインコンテンツ -->
+    <div class="content-container">
+        <!-- テキスト入力パネル -->
+        <div class="text-panel" id="text-panel">
+            <div class="panel-header">
+                <h2 class="panel-title">スライド作成</h2>
+                <p class="panel-subtitle">テキストを入力するだけでスライドを自動生成します。</p>
+            </div>
+            
+            <div class="textarea-container">
+                <div class="textarea-label">スライド内容:</div>
+                <textarea id="input-text" placeholder="ここにプレゼンテーションのテキストを入力してください。
+改行2回で新しいスライドを作成します。「# 」で始まる行はタイトルになります。
+
+例:
+# ビジネスモデルキャンバス
+ビジネスモデルキャンバスは、ビジネスモデルを視覚的に表現するためのツールです。
+
+9つの要素で構成されています：
+1. 顧客セグメント
+2. 価値提案
+3. チャネル
+4. 顧客関係
+5. 収益の流れ
+6. 主要リソース
+7. 主要活動
+8. 主要パートナー
+9. コスト構造"></textarea>
+            </div>
+            
+            <div class="textarea-label">特別な指示（オプション）:</div>
+            <textarea id="instruction-text" placeholder="スライドのデザインや内容に関する特別な指示があれば入力してください。例:「ビジネス向けのシンプルなデザインにしてください」"></textarea>
+            
+            <div class="settings-group">
+                <h3>デザイン設定</h3>
+                <div class="setting-item">
+                    <label for="theme-select">テーマ</label>
+                    <select id="theme-select">
+                        <option value="dark">ダーク</option>
+                        <option value="light">ライト</option>
+                        <option value="gradient">グラデーション</option>
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label for="primary-color">メインカラー</label>
+                    <input type="color" id="primary-color" value="#0078d4">
+                </div>
+                <div class="setting-item">
+                    <label for="transition-type">トランジション</label>
+                    <select id="transition-type">
+                        <option value="fade">フェード</option>
+                        <option value="slide">スライド</option>
+                        <option value="zoom">ズーム</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="button-row">
+                <button id="generate-btn" class="btn">スライド生成</button>
+                <button id="preview-btn" class="btn btn-secondary">プレビュー</button>
+            </div>
+        </div>
+        
+        <!-- スライド表示エリア -->
+        <div class="slide-view" id="slide-view">
+            <div id="canvas-container"></div>
+            
+            <div class="slide-thumbnails" id="slide-thumbnails"></div>
+            
+            <div class="slide-controls">
+                <div class="slide-nav">
+                    <button class="nav-btn" id="prev-slide">◀</button>
+                    <div class="slide-number">スライド <span id="current-slide">1</span> / <span id="total-slides">1</span></div>
+                    <button class="nav-btn" id="next-slide">▶</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- パネル切り替えボタン -->
+        <button id="toggle-panel" class="toggle-panel">◀</button>
+    </div>
+    
+    <!-- ローディングオーバーレイ -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div class="loading-text">スライドを生成中...</div>
+        </div>
+    </div>
+    
+    <!-- サムネイル格納用（非表示） -->
+    <div class="thumbnail-container" id="thumbnail-container"></div>
+    
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+            "marked": "https://cdn.jsdelivr.net/npm/marked@11.0.1/+esm"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { marked } from 'marked';
+        
+        // ----------------------
+        // 状態管理
+        // ----------------------
+        const state = {
+            slides: [],              // スライドデータ
+            currentIndex: 0,         // 現在のスライドインデックス
+            slideTextures: [],       // スライドテクスチャ
+            slideMeshes: [],         // スライドメッシュ
+            inTransition: false,     // トランジション中フラグ
+            viewActive: false        // スライドビュー表示フラグ
+        };
+        
+        // Three.js関連
+        let scene, camera, renderer;
+        
+        // テーマ設定
+        const themes = {
+            dark: {
+                background: "#1a1a1a",
+                textColor: "#ffffff"
+            },
+            light: {
+                background: "#ffffff",
+                textColor: "#333333"
+            },
+            gradient: {
+                background: "linear-gradient(135deg, #1a237e, #311b92)",
+                textColor: "#ffffff"
+            }
+        };
+        
+        // DOM要素
+        const elements = {
+            textPanel: document.getElementById('text-panel'),
+            inputText: document.getElementById('input-text'),
+            instructionText: document.getElementById('instruction-text'),
+            generateBtn: document.getElementById('generate-btn'),
+            previewBtn: document.getElementById('preview-btn'),
+            slideView: document.getElementById('slide-view'),
+            canvasContainer: document.getElementById('canvas-container'),
+            prevSlideBtn: document.getElementById('prev-slide'),
+            nextSlideBtn: document.getElementById('next-slide'),
+            currentSlideEl: document.getElementById('current-slide'),
+            totalSlidesEl: document.getElementById('total-slides'),
+            slideThumbnails: document.getElementById('slide-thumbnails'),
+            thumbnailContainer: document.getElementById('thumbnail-container'),
+            togglePanelBtn: document.getElementById('toggle-panel'),
+            loadingOverlay: document.getElementById('loading-overlay'),
+            themeSelect: document.getElementById('theme-select'),
+            primaryColorInput: document.getElementById('primary-color'),
+            transitionTypeSelect: document.getElementById('transition-type')
+        };
+        
+        // ----------------------
+        // 初期化
+        // ----------------------
+        function init() {
+            // イベントリスナーのセットアップ
+            setupEventListeners();
+        }
+        
+        // イベントリスナーの設定
+        function setupEventListeners() {
+            elements.generateBtn.addEventListener('click', generateSlides);
+            elements.previewBtn.addEventListener('click', previewSlide);
+            elements.prevSlideBtn.addEventListener('click', previousSlide);
+            elements.nextSlideBtn.addEventListener('click', nextSlide);
+            elements.togglePanelBtn.addEventListener('click', togglePanel);
+            
+            // キーボードイベント
+            document.addEventListener('keydown', handleKeydown);
+        }
+        
+        // Three.jsの初期化
+        function setupThreeJS() {
+            // シーンの設定
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
+            
+            // カメラの設定
+            const aspectRatio = elements.canvasContainer.clientWidth / elements.canvasContainer.clientHeight;
+            camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
+            
+            // スライドの寸法設定（16:9のアスペクト比）
+            const slideWidth = 16;
+            const slideHeight = 9;
+            
+            // スライドをビューに収めるために必要な距離を計算
+            const fov = camera.fov * (Math.PI / 180);
+            let distance = (slideHeight / 2) / Math.tan(fov / 2);
+            
+            if (aspectRatio < slideWidth / slideHeight) {
+                distance = (slideWidth / 2) / Math.tan(fov / 2) / aspectRatio;
+            }
+            
+            camera.position.z = distance;
+            
+            // レンダラーの設定
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: true,
+                preserveDrawingBuffer: true
+            });
+            renderer.setSize(elements.canvasContainer.clientWidth, elements.canvasContainer.clientHeight);
+            renderer.setClearColor(0x1a1a1a);
+            
+            // レンダラーをコンテナに追加
+            elements.canvasContainer.appendChild(renderer.domElement);
+            
+            // クリッピングプレーンの有効化
+            renderer.localClippingEnabled = true;
+            
+            // ウィンドウリサイズイベントの設定
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        // ----------------------
+        // スライド生成
+        // ----------------------
+        function generateSlides() {
+            const text = elements.inputText.value.trim();
+            if (!text) {
+                alert('テキストを入力してください');
+                return;
+            }
+            
+            showLoading();
+            
+            // Three.jsが初期化されていない場合は初期化
+            if (!scene) {
+                setupThreeJS();
+            }
+            
+            // テキストを解析してスライドに分割
+            setTimeout(() => {
+                const parsedSlides = parseTextIntoSlides(text);
+                
+                // レイアウト変更 - パネルを右側に配置し、スライドビューを表示
+                elements.textPanel.classList.add('side-panel');
+                elements.slideView.classList.add('active');
+                state.viewActive = true;
+                elements.togglePanelBtn.classList.add('active');
+                
+                // スライド生成
+                createSlides(parsedSlides);
+            }, 1000);
+        }
+        
+        // プレビュー機能
+        function previewSlide() {
+            const text = elements.inputText.value.trim();
+            if (!text) {
+                alert('テキストを入力してください');
+                return;
+            }
+            
+            showLoading();
+            
+            // Three.jsが初期化されていない場合は初期化
+            if (!scene) {
+                setupThreeJS();
+            }
+            
+            // シンプルなプレビュースライド
+            const slide = {
+                index: 1,
+                title: "プレビュー",
+                content: text
+            };
+            
+            // レイアウト変更 - パネルを右側に配置し、スライドビューを表示
+            setTimeout(() => {
+                elements.textPanel.classList.add('side-panel');
+                elements.slideView.classList.add('active');
+                state.viewActive = true;
+                elements.togglePanelBtn.classList.add('active');
+                
+                // スライド生成
+                createSlides([slide]);
+            }, 1000);
+        }
+        
+        // テキストからスライドを解析
+        function parseTextIntoSlides(text) {
+            // スライドに分割するための処理
+            let slides = [];
+            
+            // 2つの改行（空行）で分割
+            const paragraphs = text.split(/\n{2,}/);
+            
+            if (paragraphs.length <= 1) {
+                // 単一段落の場合、1枚のスライドとして扱う
+                const hasTitle = paragraphs[0].startsWith('# ');
+                slides.push({
+                    title: hasTitle ? paragraphs[0].replace(/^#\s+/, '') : "スライド",
+                    content: hasTitle ? "" : paragraphs[0]
+                });
+            } else {
+                // 複数段落の場合
+                let currentSlide = null;
+                
+                // 最初の段落をタイトルスライドとして扱う
+                const hasTitle = paragraphs[0].startsWith('# ');
+                let titleSlide = {
+                    isTitle: true,
+                    title: hasTitle ? paragraphs[0].replace(/^#\s+/, '') : paragraphs[0],
+                    content: ""
+                };
+                slides.push(titleSlide);
+                
+                // 残りの段落を処理
+                for (let i = 1; i < paragraphs.length; i++) {
+                    const paragraph = paragraphs[i].trim();
+                    
+                    // 「#」で始まる場合は新しいスライド
+                    if (paragraph.startsWith('# ')) {
+                        if (currentSlide) {
+                            slides.push(currentSlide);
+                        }
+                        
+                        currentSlide = {
+                            title: paragraph.replace(/^#\s+/, ''),
+                            content: ""
+                        };
+                    } else {
+                        // 既存のスライドに追加するか、新しいスライドを作成
+                        if (!currentSlide) {
+                            currentSlide = {
+                                title: `スライド ${slides.length + 1}`,
+                                content: paragraph
+                            };
+                        } else {
+                            currentSlide.content += (currentSlide.content ? "\n\n" : "") + paragraph;
+                        }
+                    }
+                }
+                
+                // 最後のスライドを追加
+                if (currentSlide) {
+                    slides.push(currentSlide);
+                }
+            }
+            
+            // スライド番号を追加
+            return slides.map((slide, index) => ({
+                ...slide,
+                index: index + 1
+            }));
+        }
+        
+        // スライドの作成
+        function createSlides(slidesData) {
+            // 既存のスライドをクリア
+            clearSlides();
+            
+            if (slidesData.length === 0) {
+                hideLoading();
+                return;
+            }
+            
+            // スライドの設定を取得
+            const theme = themes[elements.themeSelect.value];
+            const primaryColor = elements.primaryColorInput.value;
+            
+            // スライドの寸法設定（16:9のアスペクト比）
+            const slideWidth = 16;
+            const slideHeight = 9;
+            const slideGeometry = new THREE.PlaneGeometry(slideWidth, slideHeight);
+            
+            // 全スライドのテクスチャを生成
+            Promise.all(slidesData.map((slide) => 
+                createSlideTexture(slide, theme, primaryColor)
+            ))
+            .then(textures => {
+                // テクスチャを保存
+                state.slideTextures = textures;
+                
+                // スライドメッシュを作成
+                textures.forEach((texture, index) => {
+                    const slideMaterial = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        side: THREE.FrontSide
+                    });
+                    
+                    const slideMesh = new THREE.Mesh(slideGeometry, slideMaterial);
+                    
+                    // 最初のスライド以外は非表示
+                    slideMesh.visible = index === 0;
+                    
+                    // スライドを保存
+                    state.slideMeshes.push(slideMesh);
+                    scene.add(slideMesh);
+                });
+                
+                // スライドデータを保存
+                state.slides = slidesData;
+                
+                // カウンター更新
+                state.currentIndex = 0;
+                updateSlideCounter();
+                
+                // サムネイル更新
+                updateSlideThumbnails();
+                
+                // アニメーションを開始
+                if (!renderer.animation) {
+                    animate();
+                }
+                
+                hideLoading();
+            })
+            .catch(error => {
+                console.error("スライド生成エラー:", error);
+                hideLoading();
+                alert("エラー: スライドの生成中に問題が発生しました");
+            });
+        }
+        
+        // スライドテクスチャの作成
+        function createSlideTexture(slide, theme, primaryColor) {
+            return new Promise((resolve) => {
+                // キャンバスの作成
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // キャンバスサイズ設定（高解像度）
+                canvas.width = 1920;
+                canvas.height = 1080;
+                
+                // 背景の描画
+                if (theme.background.includes('gradient')) {
+                    // グラデーション背景
+                    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                    gradient.addColorStop(0, "#1a237e");
+                    gradient.addColorStop(1, "#311b92");
+                    ctx.fillStyle = gradient;
+                } else {
+                    // 単色背景
+                    ctx.fillStyle = theme.background;
+                }
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // スライドタイプに基づいた描画
+                if (slide.isTitle) {
+                    drawTitleSlide(ctx, slide, canvas.width, canvas.height, primaryColor, theme.textColor);
+                } else {
+                    drawContentSlide(ctx, slide, canvas.width, canvas.height, primaryColor, theme.textColor);
+                }
+                
+                // スライド番号
+                ctx.font = 'bold 24px Arial';
+                ctx.fillStyle = theme.textColor + "80"; // 半透明
+                ctx.textAlign = 'right';
+                ctx.fillText(`${slide.index}/${state.slides.length || '?'}`, canvas.width - 40, canvas.height - 30);
+                
+                // テクスチャを作成して返す
+                const texture = new THREE.CanvasTexture(canvas);
+                
+                // サムネイルも生成
+                createThumbnail(canvas, slide.index - 1);
+                
+                resolve(texture);
+            });
+        }
+        
+        // タイトルスライドの描画
+        function drawTitleSlide(ctx, slide, width, height, primaryColor, textColor) {
+            // メインタイトル
+            ctx.font = 'bold 80px Arial';
+            ctx.fillStyle = primaryColor;
+            ctx.textAlign = 'center';
+            
+            // タイトル描画
+            wrapText(ctx, slide.title, width / 2, height / 2 - 40, width * 0.8, 90);
+            
+            // 装飾ライン
+            ctx.strokeStyle = primaryColor;
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.moveTo(width / 2 - 200, height / 2 + 30);
+            ctx.lineTo(width / 2 + 200, height / 2 + 30);
+            ctx.stroke();
+            
+            // サブタイトル（あれば）
+            if (slide.content) {
+                ctx.font = '36px Arial';
+                ctx.fillStyle = textColor;
+                wrapText(ctx, slide.content, width / 2, height / 2 + 100, width * 0.8, 50);
+            }
+        }
+        
+        // 通常スライドの描画
+        function drawContentSlide(ctx, slide, width, height, primaryColor, textColor) {
+            // タイトル
+            const titleY = 120;
+            ctx.font = 'bold 60px Arial';
+            ctx.fillStyle = primaryColor;
+            ctx.textAlign = 'center';
+            ctx.fillText(slide.title, width / 2, titleY);
+            
+            // 水平線
+            ctx.strokeStyle = primaryColor;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(width * 0.2, titleY + 30);
+            ctx.lineTo(width * 0.8, titleY + 30);
+            ctx.stroke();
+            
+            // コンテンツ
+            ctx.font = '36px Arial';
+            ctx.fillStyle = textColor;
+            ctx.textAlign = 'left';
+            
+            const contentStartY = titleY + 80;
+            const maxWidth = width * 0.7;
+            const leftMargin = width * 0.15;
+            
+            // リストか通常テキストかを判断
+            const hasList = slide.content.includes('-') || slide.content.includes('*') || /^\d+\.\s/.test(slide.content);
+            
+            if (hasList) {
+                // リスト形式のコンテンツ
+                const lines = slide.content.split('\n').filter(line => line.trim().length > 0);
+                const lineHeight = 50;
+                
+                lines.forEach((line, index) => {
+                    const y = contentStartY + index * lineHeight;
+                    
+                    if (line.trim().startsWith('-') || line.trim().startsWith('*')) {
+                        // 箇条書き
+                        ctx.fillStyle = primaryColor;
+                        ctx.beginPath();
+                        ctx.arc(leftMargin, y - 12, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        ctx.fillStyle = textColor;
+                        const text = line.replace(/^[-*]\s+/, '').trim();
+                        ctx.fillText(text, leftMargin + 25, y);
+                    } else if (/^\d+\.\s/.test(line.trim())) {
+                        // 番号付きリスト
+                        ctx.fillStyle = textColor;
+                        ctx.fillText(line, leftMargin, y);
+                    } else {
+                        // 通常のテキスト
+                        wrapText(ctx, line, leftMargin, y, maxWidth, lineHeight);
+                    }
+                });
+            } else {
+                // 通常のテキスト
+                wrapText(ctx, slide.content, leftMargin, contentStartY, maxWidth, 50);
+            }
+        }
+        
+        // テキストを折り返して描画
+        function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let line = '';
+            let testY = y;
+            
+            for (let i = 0; i < words.length; i++) {
+                const testLine = line + words[i] + ' ';
+                const metrics = ctx.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth > maxWidth && i > 0) {
+                    ctx.fillText(line, x, testY);
+                    line = words[i] + ' ';
+                    testY += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            
+            if (line.trim()) {
+                ctx.fillText(line, x, testY);
+            }
+        }
+        
+        // サムネイル画像の生成
+        function createThumbnail(canvas, index) {
+            const thumbnailCanvas = document.createElement('canvas');
+            const thumbCtx = thumbnailCanvas.getContext('2d');
+            
+            // サムネイルのサイズ設定
+            thumbnailCanvas.width = 120;
+            thumbnailCanvas.height = 68;
+            
+            // 元のキャンバスから縮小コピー
+            thumbCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, thumbnailCanvas.width, thumbnailCanvas.height);
+            
+            // サムネイルを保存
+            if (!elements.thumbnailContainer.children[index]) {
+                const img = document.createElement('img');
+                img.dataset.index = index;
+                elements.thumbnailContainer.appendChild(img);
+            }
+            
+            elements.thumbnailContainer.children[index].src = thumbnailCanvas.toDataURL('image/png');
+        }
+        
+        // サムネイルの更新
+        function updateSlideThumbnails() {
+            // 既存のサムネイルをクリア
+            elements.slideThumbnails.innerHTML = '';
+            
+            // 新しいサムネイルを追加
+            for (let i = 0; i < elements.thumbnailContainer.children.length; i++) {
+                const thumbnail = document.createElement('div');
+                thumbnail.className = 'thumbnail';
+                thumbnail.dataset.index = i;
+                
+                if (i === state.currentIndex) {
+                    thumbnail.classList.add('active');
+                }
+                
+                const img = document.createElement('img');
+                img.src = elements.thumbnailContainer.children[i].src;
+                
+                thumbnail.appendChild(img);
+                thumbnail.addEventListener('click', () => goToSlide(i));
+                
+                elements.slideThumbnails.appendChild(thumbnail);
+            }
+        }
+        
+        // ----------------------
+        // スライドナビゲーション
+        // ----------------------
+        function nextSlide() {
+            if (state.inTransition || state.currentIndex >= state.slideMeshes.length - 1) return;
+            goToSlide(state.currentIndex + 1);
+        }
+        
+        function previousSlide() {
+            if (state.inTransition || state.currentIndex <= 0) return;
+            goToSlide(state.currentIndex - 1);
+        }
+        
+        function goToSlide(index) {
+            if (state.inTransition || index === state.currentIndex || index < 0 || index >= state.slideMeshes.length) return;
+            
+            state.inTransition = true;
+            
+            // トランジション設定を取得
+            const transitionType = elements.transitionTypeSelect.value;
+            const duration = 0.8; // 固定トランジション時間
+            
+            // 現在のスライドと次のスライド
+            const currentSlide = state.slideMeshes[state.currentIndex];
+            const nextSlide = state.slideMeshes[index];
+            nextSlide.visible = true;
+            
+            // トランジションタイプに基づいた処理
+            switch (transitionType) {
+                case 'slide':
+                    performSlideTransition(currentSlide, nextSlide, duration);
+                    break;
+                case 'zoom':
+                    performZoomTransition(currentSlide, nextSlide, duration);
+                    break;
+                default:
+                    performFadeTransition(currentSlide, nextSlide, duration);
+            }
+            
+            // インデックスの更新
+            state.currentIndex = index;
+            updateSlideCounter();
+            updateSlideThumbnails();
+        }
+        
+        // フェードトランジション
+        function performFadeTransition(currentSlide, nextSlide, duration) {
+            // 透明度用にマテリアルを準備
+            currentSlide.material = currentSlide.material.clone();
+            currentSlide.material.transparent = true;
+            currentSlide.material.needsUpdate = true;
+            
+            nextSlide.material = nextSlide.material.clone();
+            nextSlide.material.transparent = true;
+            nextSlide.material.opacity = 0;
+            nextSlide.material.needsUpdate = true;
+            
+            // アニメーション
+            const startTime = Date.now();
+            const animate = function() {
+                const now = Date.now();
+                const elapsed = (now - startTime) / 1000; // 秒単位
+                const progress = Math.min(elapsed / duration, 1);
+                
+                currentSlide.material.opacity = 1 - progress;
+                nextSlide.material.opacity = progress;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // トランジション完了
+                    currentSlide.visible = false;
+                    currentSlide.material.opacity = 1;
+                    nextSlide.material.opacity = 1;
+                    state.inTransition = false;
+                }
+            };
+            
+            animate();
+        }
+        
+        // スライドトランジション
+        function performSlideTransition(currentSlide, nextSlide, duration) {
+            // スライドの移動方向（次へなら右から、前へなら左から）
+            const direction = state.currentIndex < state.slideMeshes.indexOf(nextSlide) ? 1 : -1;
+            const startPosition = 20 * direction;
+            
+            // 初期位置の設定
+            nextSlide.position.x = startPosition;
+            
+            // アニメーション
+            const startTime = Date.now();
+            const animate = function() {
+                const now = Date.now();
+                const elapsed = (now - startTime) / 1000; // 秒単位
+                const progress = Math.min(elapsed / duration, 1);
+                
+                currentSlide.position.x = -startPosition * progress;
+                nextSlide.position.x = startPosition * (1 - progress);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // トランジション完了
+                    currentSlide.visible = false;
+                    currentSlide.position.x = 0;
+                    nextSlide.position.x = 0;
+                    state.inTransition = false;
+                }
+            };
+            
+            animate();
+        }
+        
+        // ズームトランジション
+        function performZoomTransition(currentSlide, nextSlide, duration) {
+            // 初期スケールの設定
+            nextSlide.scale.set(0.5, 0.5, 1);
+            nextSlide.material = nextSlide.material.clone();
+            nextSlide.material.transparent = true;
+            nextSlide.material.opacity = 0;
+            nextSlide.material.needsUpdate = true;
+            
+            // 現在のスライドも透明度を設定
+            currentSlide.material = currentSlide.material.clone();
+            currentSlide.material.transparent = true;
+            currentSlide.material.needsUpdate = true;
+            
+            // アニメーション
+            const startTime = Date.now();
+            const animate = function() {
+                const now = Date.now();
+                const elapsed = (now - startTime) / 1000; // 秒単位
+                const progress = Math.min(elapsed / duration, 1);
+                
+                currentSlide.scale.set(1 + 0.5 * progress, 1 + 0.5 * progress, 1);
+                currentSlide.material.opacity = 1 - progress;
+                
+                nextSlide.scale.set(0.5 + 0.5 * progress, 0.5 + 0.5 * progress, 1);
+                nextSlide.material.opacity = progress;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // トランジション完了
+                    currentSlide.visible = false;
+                    currentSlide.scale.set(1, 1, 1);
+                    nextSlide.scale.set(1, 1, 1);
+                    nextSlide.material.opacity = 1;
+                    state.inTransition = false;
+                }
+            };
+            
+            animate();
+        }
+        
+        // スライドカウンターの更新
+        function updateSlideCounter() {
+            elements.currentSlideEl.textContent = state.currentIndex + 1;
+            elements.totalSlidesEl.textContent = state.slides.length;
+        }
+        
+        // ----------------------
+        // ユーティリティ関数
+        // ----------------------
+        function showLoading() {
+            elements.loadingOverlay.classList.add('active');
+        }
+        
+        function hideLoading() {
+            elements.loadingOverlay.classList.remove('active');
+        }
+        
+        function togglePanel() {
+            elements.textPanel.classList.toggle('collapsed');
+            elements.togglePanelBtn.classList.toggle('collapsed');
+            
+            // アイコンを更新
+            if (elements.textPanel.classList.contains('collapsed')) {
+                elements.togglePanelBtn.textContent = '▶';
+            } else {
+                elements.togglePanelBtn.textContent = '◀';
+            }
+        }
+        
+        function onWindowResize() {
+            if (!camera || !renderer) return;
+            
+            const width = elements.canvasContainer.clientWidth;
+            const height = elements.canvasContainer.clientHeight;
+            camera.aspect = width / height;
+            
+            // カメラ位置を再計算
+            const slideWidth = 16;
+            const slideHeight = 9;
+            const fov = camera.fov * (Math.PI / 180);
+            let distance = (slideHeight / 2) / Math.tan(fov / 2);
+            
+            if (camera.aspect < slideWidth / slideHeight) {
+                distance = (slideWidth / 2) / Math.tan(fov / 2) / camera.aspect;
+            }
+            
+            camera.position.z = distance;
+            camera.updateProjectionMatrix();
+            
+            renderer.setSize(width, height);
+        }
+        
+        function handleKeydown(event) {
+            // スライドビューがアクティブな場合のみキーボードナビゲーションを有効にする
+            if (!state.viewActive) return;
+            
+            switch (event.key) {
+                case 'ArrowRight':
+                case ' ':
+                    nextSlide();
+                    break;
+                case 'ArrowLeft':
+                    previousSlide();
+                    break;
+            }
+        }
+        
+        function clearSlides() {
+            // スライドメッシュを削除
+            for (const mesh of state.slideMeshes) {
+                scene.remove(mesh);
+                if (mesh.material) mesh.material.dispose();
+                if (mesh.geometry) mesh.geometry.dispose();
+            }
+            
+            // テクスチャを削除
+            for (const texture of state.slideTextures) {
+                if (texture) texture.dispose();
+            }
+            
+            // 配列をクリア
+            state.slideMeshes = [];
+            state.slideTextures = [];
+            state.slides = [];
+            
+            // サムネイルコンテナをクリア
+            elements.thumbnailContainer.innerHTML = '';
+        }
+        
+        // アニメーションループ
+        function animate() {
+            renderer.animation = requestAnimationFrame(animate);
+            if (scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+        
+        // アプリケーション初期化
+        init();
+    </script>
+</body>
+</html>

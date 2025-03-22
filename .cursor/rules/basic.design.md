@@ -6,6 +6,7 @@
 
 - `short/`: 短いThree.jsデモやサンプルを格納
 - `slides/`: プレゼンテーション用のファイルを格納
+- `caption/`: キャプション付きのデモを格納
 
 以下のディレクトリやファイルはGitHubにプッシュしないでください：
 
@@ -39,6 +40,9 @@ Three_js/
 │   └── ...
 ├── slides/            # プレゼンテーション資料
 │   ├── presentation.html
+│   └── ...
+├── caption/           # キャプション付きデモ
+│   ├── caption_test.html
 │   └── ...
 ├── .cursor/           # Cursorエディタ設定
 │   └── rules/         # プロジェクトルール

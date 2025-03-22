@@ -162,6 +162,14 @@
       color: #aaa;
       margin-top: 2px;
     }
+    .fit-select {
+      margin-left: 5px;
+      background-color: #333;
+      color: white;
+      border: 1px solid #555;
+      padding: 8px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
@@ -175,6 +183,10 @@
       <label for="imageUpload" class="upload-btn">画像を選択</label>
       <button id="startBtn" class="start-btn">開始</button>
       <button id="clearBtn" class="clear-btn">クリア</button>
+      <select id="fitMode" class="fit-select">
+        <option value="contain">画像全体表示</option>
+        <option value="cover">画面いっぱい</option>
+      </select>
     </div>
     
     <div class="glitch-options">
@@ -263,6 +275,7 @@
     const controlPanel = document.getElementById('controlPanel');
     const toggleControls = document.getElementById('toggleControls');
     const hideControlsCheckbox = document.getElementById('hideControls');
+    const fitModeSelect = document.getElementById('fitMode');
     
     // エフェクト設定要素
     const effectTypeSelect = document.getElementById('effectType');
@@ -312,8 +325,8 @@
     // シーンのセットアップ
     const scene = new THREE.Scene();
     
-    // カメラのセットアップ（9:16比率用）
-    const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5 * (16/9), -0.5 * (16/9), 0.1, 1000);
+    // カメラのセットアップ
+    const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 1000);
     camera.position.z = 1;
     
     // レンダラーのセットアップ
@@ -467,6 +480,142 @@
       }
     });
     
+    // 画像のロード（URLリストから）
+    const loadTextures = async (imageSources) => {
+      try {
+        // テクスチャ配列をクリア
+        textures = [];
+        
+        setStatus('画像をロード中...');
+        
+        const promises = imageSources.map((src, index) => {
+          return new Promise((resolve, reject) => {
+            // 画像要素を作成して読み込み
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            
+            img.onload = () => {
+              // オリジナルのアスペクト比を計算
+              const originalRatio = img.width / img.height;
+              const targetRatio = 9 / 16;
+              
+              setStatus(`画像 ${index + 1}/${imageSources.length} (${img.width}x${img.height}) を処理中...`);
+              
+              // 画像をリサイズするためのキャンバスを作成
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              
+              // 9:16のキャンバスサイズを設定
+              const canvasWidth = 900;
+              const canvasHeight = 1600;
+              canvas.width = canvasWidth;
+              canvas.height = canvasHeight;
+              
+              // 塗りつぶし色（黒）
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+              
+              // 画像を9:16の中央に配置するための計算
+              let drawWidth, drawHeight, offsetX, offsetY;
+              
+              // 選択されたフィットモードを取得
+              const fitMode = fitModeSelect.value;
+              
+              if (fitMode === 'contain') {
+                // 画像全体表示モード
+                if (originalRatio > targetRatio) {
+                  // 横長画像の場合、幅に合わせる
+                  drawWidth = canvasWidth;
+                  drawHeight = canvasWidth / originalRatio;
+                  offsetX = 0;
+                  offsetY = (canvasHeight - drawHeight) / 2;
+                } else {
+                  // 縦長画像の場合、高さに合わせる
+                  drawHeight = canvasHeight;
+                  drawWidth = canvasHeight * originalRatio;
+                  offsetX = (canvasWidth - drawWidth) / 2;
+                  offsetY = 0;
+                }
+              } else { // cover モード
+                // 画面いっぱいモード（必要に応じてトリミング）
+                if (originalRatio > targetRatio) {
+                  // 横長画像の場合、高さに合わせて横をトリミング
+                  drawHeight = canvasHeight;
+                  drawWidth = canvasHeight * originalRatio;
+                  offsetX = (canvasWidth - drawWidth) / 2;
+                  offsetY = 0;
+                } else {
+                  // 縦長画像の場合、幅に合わせて縦をトリミング
+                  drawWidth = canvasWidth;
+                  drawHeight = canvasWidth / originalRatio;
+                  offsetX = 0;
+                  offsetY = (canvasHeight - drawHeight) / 2;
+                }
+              }
+              
+              // 画像を描画
+              ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+              
+              // キャンバスからテクスチャを作成
+              const texture = new THREE.CanvasTexture(canvas);
+              texture.minFilter = THREE.LinearFilter;
+              texture.magFilter = THREE.LinearFilter;
+              
+              setStatus(`画像 ${index + 1}/${imageSources.length} をロードしました`);
+              resolve(texture);
+            };
+            
+            img.onerror = (err) => {
+              console.error(`画像 ${index + 1} のロードに失敗:`, err);
+              setStatus(`画像のロードに失敗しました`);
+              reject(err);
+            };
+            
+            img.src = src;
+          });
+        });
+        
+        try {
+          const loadedTextures = await Promise.all(promises);
+          textures = loadedTextures;
+          
+          if (textures.length >= 2) {
+            setStatus(`${textures.length}枚の画像を準備完了！`);
+            setupScene();
+          } else {
+            setStatus('エラー: 十分な画像がロードできませんでした');
+          }
+        } catch (err) {
+          console.error("テクスチャのロードに失敗:", err);
+          setStatus(`テクスチャのロードに失敗しました: ${err.message}`);
+        }
+      } catch (e) {
+        console.error("テクスチャロードエラー:", e);
+        setStatus(`テクスチャロードエラー: ${e.message}`);
+      }
+    };
+    
+    // サンプル画像を読み込む
+    const loadSampleTextures = () => {
+      try {
+        setStatus('サンプル画像をロード中...');
+        
+        // サンプル画像のプレビューを表示
+        imagePreview.innerHTML = '';
+        sampleImages.forEach(src => {
+          const img = document.createElement('img');
+          img.src = src;
+          imagePreview.appendChild(img);
+        });
+        
+        // サンプル画像をロード
+        loadTextures(sampleImages);
+      } catch (e) {
+        console.error("サンプルロードエラー:", e);
+        setStatus(`サンプルロードエラー: ${e.message}`);
+      }
+    };
+    
     // グリッチエフェクトのプリセット
     const effectPresets = {
       classic: {
@@ -530,6 +679,7 @@
           
           void main() {
             vec2 uv = vUv;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // デフォルト効果なし画像
             vec4 current = texture2D(tCurrent, uv);
@@ -537,7 +687,6 @@
             vec4 color = mix(current, next, progress);
             
             // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             float effectiveIntensity = intensity;
             
             // グリッチノイズの計算
@@ -567,7 +716,7 @@
               next = rgbShift(tNext, glitchUv);
               
               // 2つのテクスチャのブレンド
-              color = mix(current, next, delayedProgress);
+              color = mix(current, next, p);
               
               // スキャンラインでグリッチ効果を強調
               color.rgb *= scanVal;
@@ -653,6 +802,7 @@
           
           void main() {
             vec2 uv = vUv;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // デフォルト効果なし画像
             vec4 current = texture2D(tCurrent, uv);
@@ -660,7 +810,6 @@
             vec4 color = mix(current, next, progress);
             
             // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             float effectiveIntensity = intensity;
             
             // エフェクト強度が十分な場合のみエフェクト適用
@@ -695,7 +844,7 @@
               }
               
               // ブレンド
-              color = mix(current, next, delayedProgress);
+              color = mix(current, next, p);
             }
             
             gl_FragColor = color;
@@ -779,6 +928,7 @@
           
           void main() {
             vec2 uv = vUv;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // デフォルト効果なし画像
             vec4 current = texture2D(tCurrent, uv);
@@ -786,7 +936,6 @@
             vec4 color = mix(current, next, progress);
             
             // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             float effectiveIntensity = intensity;
             
             // エフェクト強度が十分な場合のみエフェクト適用
@@ -803,7 +952,7 @@
               next = colorBleeding(tNext, uv);
               
               // 画像ブレンド
-              color = mix(current, next, delayedProgress);
+              color = mix(current, next, p);
               
               // ラインノイズ
               float ln = lineNoise(uv);
@@ -884,6 +1033,7 @@
           
           void main() {
             vec2 uv = vUv;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // デフォルト効果なし画像
             vec4 current = texture2D(tCurrent, uv);
@@ -891,7 +1041,6 @@
             vec4 color = mix(current, next, progress);
             
             // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             float effectiveIntensity = intensity;
             
             // エフェクト強度が十分な場合のみエフェクト適用
@@ -922,7 +1071,7 @@
               next = extremeGlitch(distortedUv, tNext);
               
               // ブレンド
-              color = mix(current, next, delayedProgress);
+              color = mix(current, next, p);
               
               // ノイズ追加
               float noiseAmount = 0.05 * effectiveIntensity;
@@ -993,36 +1142,29 @@
           
           void main() {
             vec2 uv = vUv;
-            
-            // デフォルト効果なし画像
-            vec4 current = texture2D(tCurrent, uv);
-            vec4 next = texture2D(tNext, uv);
-            vec4 color = mix(current, next, progress);
-            
-            // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
-            float effectiveIntensity = intensity;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // 通常表示（エフェクトなし）
-            if (effectiveIntensity < 0.05) {
-              color = simpleBlend(tCurrent, tNext, uv, delayedProgress);
+            if (intensity < 0.05) {
+              vec4 color = simpleBlend(tCurrent, tNext, uv, p);
+              gl_FragColor = color;
+              return;
             } 
+            
             // エフェクト強度が十分な場合のみエフェクト適用
-            else {
-              // 軽度の歪み
-              float distortion = sin(uv.y * 10.0 + time) * 0.0005 * effectiveIntensity;
-              vec2 distortedUv = uv + vec2(distortion, 0.0);
-              
-              // 軽度のRGBシフト
-              vec4 currentColor = subtleRGBShift(tCurrent, distortedUv);
-              vec4 nextColor = subtleRGBShift(tNext, distortedUv);
-              
-              color = mix(currentColor, nextColor, delayedProgress);
-              
-              // 時々薄いスキャンライン
-              float scanLine = 0.98 + 0.02 * sin(uv.y * 400.0);
-              color.rgb *= mix(1.0, scanLine, effectiveIntensity * 0.5);
-            }
+            // 軽度の歪み
+            float distortion = sin(uv.y * 10.0 + time) * 0.0005 * intensity;
+            vec2 distortedUv = uv + vec2(distortion, 0.0);
+            
+            // 軽度のRGBシフト
+            vec4 currentColor = subtleRGBShift(tCurrent, distortedUv);
+            vec4 nextColor = subtleRGBShift(tNext, distortedUv);
+            
+            vec4 color = mix(currentColor, nextColor, p);
+            
+            // 時々薄いスキャンライン
+            float scanLine = 0.98 + 0.02 * sin(uv.y * 400.0);
+            color.rgb *= mix(1.0, scanLine, intensity * 0.5);
             
             gl_FragColor = color;
           }
@@ -1105,6 +1247,7 @@
           
           void main() {
             vec2 uv = vUv;
+            float p = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             
             // デフォルト効果なし画像
             vec4 current = texture2D(tCurrent, uv);
@@ -1112,7 +1255,6 @@
             vec4 color = mix(current, next, progress);
             
             // エフェクト強度計算（遅延を考慮）
-            float delayedProgress = clamp((progress - effectDelay / 3.0) / (1.0 - effectDelay / 3.0), 0.0, 1.0);
             float effectiveIntensity = intensity;
             
             // エフェクト強度が十分な場合のみエフェクト適用
@@ -1140,7 +1282,7 @@
               }
               
               // オリジナルブレンド
-              color = mix(current, next, delayedProgress);
+              color = mix(current, next, p);
               
               // ノイズ追加
               float noiseVal = random(uv + vec2(time * 0.1, 0.0));
@@ -1155,75 +1297,7 @@
       }
     };
     
-    // 画像のロード（URLリストから）
-    const loadTextures = async (imageSources) => {
-      try {
-        // テクスチャ配列をクリア
-        textures = [];
-        
-        setStatus('画像をロード中...');
-        
-        const textureLoader = new THREE.TextureLoader();
-        const promises = imageSources.map((src, index) => {
-          return new Promise((resolve, reject) => {
-            textureLoader.load(
-              src, 
-              (texture) => {
-                setStatus(`画像 ${index + 1}/${imageSources.length} をロードしました`);
-                resolve(texture);
-              },
-              undefined,
-              (err) => {
-                console.error(`画像 ${index + 1} のロードに失敗:`, err);
-                setStatus(`画像のロードに失敗しました: ${err.message}`);
-                reject(err);
-              }
-            );
-          });
-        });
-        
-        try {
-          const loadedTextures = await Promise.all(promises);
-          textures = loadedTextures;
-          
-          if (textures.length >= 2) {
-            setStatus(`${textures.length}枚の画像を準備完了！`);
-            setupScene();
-          } else {
-            setStatus('エラー: 十分な画像がロードできませんでした');
-          }
-        } catch (err) {
-          console.error("テクスチャのロードに失敗:", err);
-          setStatus(`テクスチャのロードに失敗しました: ${err.message}`);
-        }
-      } catch (e) {
-        console.error("テクスチャロードエラー:", e);
-        setStatus(`テクスチャロードエラー: ${e.message}`);
-      }
-    };
-    
-    // サンプル画像を読み込む
-    const loadSampleTextures = () => {
-      try {
-        setStatus('サンプル画像をロード中...');
-        
-        // サンプル画像のプレビューを表示
-        imagePreview.innerHTML = '';
-        sampleImages.forEach(src => {
-          const img = document.createElement('img');
-          img.src = src;
-          imagePreview.appendChild(img);
-        });
-        
-        // サンプル画像をロード
-        loadTextures(sampleImages);
-      } catch (e) {
-        console.error("サンプルロードエラー:", e);
-        setStatus(`サンプルロードエラー: ${e.message}`);
-      }
-    };
-    
-    // グリッチシェーダーのためのマテリアル作成
+    // グリッチシェーダーのマテリアル作成
     let glitchMaterial;
     const setupScene = () => {
       try {
@@ -1236,6 +1310,9 @@
         const effectType = effectTypeSelect.value;
         const effectPreset = effectPresets[effectType];
         
+        // 平面ジオメトリ - 正方形を使用
+        const geometry = new THREE.PlaneGeometry(1, 1);
+        
         // シェーダーマテリアル
         glitchMaterial = new THREE.ShaderMaterial({
           uniforms: {
@@ -1244,16 +1321,15 @@
             progress: { value: 0.0 },
             time: { value: 0.0 },
             intensity: { value: 0.0 },
-            rgbShiftFactor: { value: rgbShiftIntensity.value / 100 },
-            blockNoiseFactor: { value: blockNoiseAmount.value / 100 },
+            rgbShiftFactor: { value: parseFloat(rgbShiftIntensity.value) / 100 },
+            blockNoiseFactor: { value: parseFloat(blockNoiseAmount.value) / 100 },
             effectDelay: { value: parseFloat(effectDelayInput.value) }
           },
           vertexShader: effectPreset.vertexShader,
-          fragmentShader: effectPreset.fragmentShader
+          fragmentShader: effectPreset.fragmentShader,
+          transparent: true
         });
         
-        // 平面ジオメトリ
-        const geometry = new THREE.PlaneGeometry(1, 16/9);
         const mesh = new THREE.Mesh(geometry, glitchMaterial);
         scene.add(mesh);
         
@@ -1355,9 +1431,16 @@
             animationState.displayTimer = 0;
             animationState.currentIndex = animationState.nextIndex;
             animationState.nextIndex = (animationState.nextIndex + 1) % textures.length;
+            
+            // 次の画像を設定
             glitchMaterial.uniforms.tCurrent.value = textures[animationState.currentIndex];
             glitchMaterial.uniforms.tNext.value = textures[animationState.nextIndex];
-            glitchMaterial.uniforms.progress.value = 0;
+            
+            // プログレスを0にリセット
+            glitchMaterial.uniforms.progress.value = 0.0;
+            
+            // エフェクト強度も0にリセット
+            glitchMaterial.uniforms.intensity.value = 0.0;
           }
         } else {
           // 表示中

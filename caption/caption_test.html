@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Three.js字幕付きショート動画デモ">
+  <title>Three.js 字幕デモ - ショート動画向け</title>
+  <!-- Noto Sans JPフォントの読み込み -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary-font: 'Noto Sans JP', sans-serif;
+      --subtitle-bg: rgba(0, 0, 0, 0.7);
+      --subtitle-color: white;
+      --subtitle-padding: 0.6rem 1.2rem;
+      --subtitle-radius: 0.3rem;
+      --subtitle-max-width: 80%;
+      --control-bg: rgba(0, 0, 0, 0.7);
+      --control-color: white;
+      --button-bg: #4CAF50;
+      --button-hover: #45a049;
+      --button-active: #2196F3;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      margin: 0; 
+      overflow: hidden;
+      font-family: var(--primary-font);
+      touch-action: manipulation;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      overscroll-behavior: none;
+    }
+    
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* エラーメッセージ用のスタイル */
+    .error-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255, 0, 0, 0.7);
+      color: white;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      max-width: 80%;
+      text-align: center;
+      z-index: 1000;
+    }
+    
+    /* 字幕コンテナ */
+    .subtitle-container {
+      position: absolute;
+      bottom: 10%;
+      left: 0;
+      right: 0;
+      text-align: center;
+      z-index: 10;
+      pointer-events: none;
+      padding: 0 1rem;
+    }
+    
+    /* 標準字幕 */
+    .subtitle-standard {
+      display: inline-block;
+      background-color: var(--subtitle-bg);
+      color: var(--subtitle-color);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    /* アニメーション字幕 */
+    .subtitle-animated {
+      display: inline-block;
+      background-color: var(--subtitle-bg);
+      color: var(--subtitle-color);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      animation: fadeInUp 0.5s ease-out;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    /* カラフル字幕 */
+    .subtitle-colorful {
+      display: inline-block;
+      background: linear-gradient(45deg, rgba(0,0,0,0.7), rgba(50,0,80,0.7));
+      color: #ffcc00;
+      text-shadow: 0 0 5px rgba(255, 255, 255, 0.3);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    /* 漫画風字幕 */
+    .subtitle-comic {
+      display: inline-block;
+      background-color: white;
+      color: black;
+      padding: var(--subtitle-padding);
+      border-radius: 10px;
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      border: 4px solid black;
+      font-weight: bold;
+      box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.8);
+      position: relative;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    .subtitle-comic:after {
+      content: "";
+      position: absolute;
+      bottom: -20px;
+      left: 50%;
+      border: 10px solid transparent;
+      border-top: 15px solid white;
+      transform: translateX(-50%);
+    }
+    
+    /* 3D風字幕 */
+    .subtitle-3d {
+      display: inline-block;
+      background-color: var(--subtitle-bg);
+      color: var(--subtitle-color);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      text-shadow: 
+        0 1px 0 #ccc,
+        0 2px 0 #c9c9c9,
+        0 3px 0 #bbb,
+        0 4px 0 #b9b9b9,
+        0 5px 0 #aaa,
+        0 6px 1px rgba(0,0,0,.1),
+        0 0 5px rgba(0,0,0,.1),
+        0 1px 3px rgba(0,0,0,.3),
+        0 3px 5px rgba(0,0,0,.2),
+        0 5px 10px rgba(0,0,0,.25),
+        0 10px 10px rgba(0,0,0,.2),
+        0 20px 20px rgba(0,0,0,.15);
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    /* カラオケ風字幕 */
+    .subtitle-karaoke {
+      display: inline-block;
+      background-color: var(--subtitle-bg);
+      color: var(--subtitle-color);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      position: relative;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    .subtitle-karaoke .highlight {
+      position: absolute;
+      top: 0;
+      left: 0;
+      background: linear-gradient(90deg, #ff8a00, #e52e71);
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      z-index: 1;
+      padding: var(--subtitle-padding);
+      overflow: hidden;
+      width: 0%;
+      white-space: nowrap;
+    }
+    
+    /* ネオンスタイル */
+    .subtitle-neon {
+      display: inline-block;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      text-shadow: 
+        0 0 5px #fff,
+        0 0 10px #fff,
+        0 0 15px #0ff,
+        0 0 20px #0ff,
+        0 0 25px #0ff,
+        0 0 30px #0ff,
+        0 0 35px #0ff;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+      hyphens: auto;
+    }
+    
+    /* 活字が1つずつ現れるタイプライター効果 */
+    .subtitle-typewriter {
+      display: inline-block;
+      background-color: var(--subtitle-bg);
+      color: var(--subtitle-color);
+      padding: var(--subtitle-padding);
+      border-radius: var(--subtitle-radius);
+      font-size: clamp(1rem, 5vw, 1.5rem);
+      margin: 0 auto;
+      max-width: var(--subtitle-max-width);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .subtitle-typewriter .text {
+      display: inline-block;
+      overflow: hidden;
+      border-right: 3px solid white;
+      white-space: nowrap;
+      animation: 
+        blink 0.7s step-end infinite;
+      width: 0;
+    }
+    
+    /* 改良したアニメーション */
+    @keyframes slideInFromLeft {
+      0% {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    /* アニメーション優先度を上げる */
+    .subtitle-standard,
+    .subtitle-animated,
+    .subtitle-colorful,
+    .subtitle-comic,
+    .subtitle-3d,
+    .subtitle-karaoke,
+    .subtitle-typewriter,
+    .subtitle-neon {
+      will-change: transform, opacity;
+    }
+    
+    @keyframes slideInFromRight {
+      0% {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideInFromBottom {
+      0% {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes slideOutToLeft {
+      0% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(-100%);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes slideOutToRight {
+      0% {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes slideOutToBottom {
+      0% {
+        transform: translateY(0);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(100%);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+      }
+      40% {
+        transform: translateY(-20px);
+      }
+      60% {
+        transform: translateY(-10px);
+      }
+    }
+    
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    
+    @keyframes blink {
+      50% {
+        opacity: 0;
+      }
+    }
+    
+    @keyframes rotateIn {
+      0% {
+        transform: rotate(-90deg) scale(0.3);
+        opacity: 0;
+      }
+      100% {
+        transform: rotate(0) scale(1);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes shake {
+      0%, 100% {
+        transform: translateX(0);
+      }
+      10%, 30%, 50%, 70%, 90% {
+        transform: translateX(-5px);
+      }
+      20%, 40%, 60%, 80% {
+        transform: translateX(5px);
+      }
+    }
+    
+    /* 注意を引く派手なアニメーション */
+    @keyframes explode {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.5);
+      }
+      70% {
+        transform: scale(0.9);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes flip {
+      0% {
+        transform: perspective(400px) rotateX(90deg);
+        opacity: 0;
+      }
+      40% {
+        transform: perspective(400px) rotateX(-20deg);
+      }
+      70% {
+        transform: perspective(400px) rotateX(10deg);
+      }
+      100% {
+        transform: perspective(400px) rotateX(0deg);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes rainbow {
+      0% { color: #ff0000; } /* 赤 */
+      14% { color: #ff7f00; } /* オレンジ */
+      28% { color: #ffff00; } /* 黄 */
+      42% { color: #00ff00; } /* 緑 */
+      57% { color: #0000ff; } /* 青 */
+      71% { color: #4b0082; } /* インディゴ */
+      85% { color: #9400d3; } /* 紫 */
+      100% { color: #ff0000; } /* 赤に戻る */
+    }
+    
+    @keyframes spotlight {
+      0% {
+        box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+        background-color: rgba(0, 0, 0, 0.7);
+      }
+      50% {
+        box-shadow: 0 0 30px 10px rgba(255, 255, 255, 0.8);
+        background-color: rgba(40, 40, 40, 0.9);
+      }
+      100% {
+        box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+        background-color: rgba(0, 0, 0, 0.7);
+      }
+    }
+    
+    @keyframes heartbeat {
+      0% {
+        transform: scale(1);
+      }
+      25% {
+        transform: scale(1.1);
+      }
+      50% {
+        transform: scale(1);
+      }
+      75% {
+        transform: scale(1.2);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    
+    @keyframes glitch {
+      0% {
+        transform: translate(0);
+      }
+      20% {
+        transform: translate(-5px, 5px);
+        text-shadow: -2px 0 #00ffff, 2px 0 #ff00ff;
+      }
+      40% {
+        transform: translate(5px, -5px);
+        text-shadow: 2px 0 #00ffff, -2px 0 #ff00ff;
+      }
+      60% {
+        transform: translate(-5px, -5px);
+        text-shadow: 2px 0 #00ffff, -2px 0 #ff00ff;
+      }
+      80% {
+        transform: translate(5px, 5px);
+        text-shadow: -2px 0 #00ffff, 2px 0 #ff00ff;
+      }
+      100% {
+        transform: translate(0);
+        text-shadow: none;
+      }
+    }
+    
+    /* 超派手なアニメーション */
+    @keyframes ultraBounce {
+      0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0) scale(1);
+      }
+      40% {
+        transform: translateY(-50px) scale(1.3);
+      }
+      60% {
+        transform: translateY(-25px) scale(1.1);
+      }
+    }
+    
+    @keyframes ultraShake {
+      0%, 100% {
+        transform: translateX(0) rotate(0);
+      }
+      10%, 30%, 50%, 70%, 90% {
+        transform: translateX(-15px) rotate(-5deg);
+      }
+      20%, 40%, 60%, 80% {
+        transform: translateX(15px) rotate(5deg);
+      }
+    }
+    
+    /* 自由配置アニメーション */
+    @keyframes cornerToCorner {
+      0% {
+        top: 10%; 
+        left: 10%;
+        transform: translate(0, 0) scale(0.7);
+      }
+      50% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(1.2);
+      }
+      100% {
+        top: 90%;
+        left: 90%;
+        transform: translate(-100%, -100%) scale(0.7);
+      }
+    }
+    
+    @keyframes zigzag {
+      0% {
+        top: 20%;
+        left: 10%;
+        transform: translate(0, 0);
+      }
+      25% {
+        top: 80%;
+        left: 30%;
+        transform: translate(0, 0);
+      }
+      50% {
+        top: 20%;
+        left: 50%;
+        transform: translate(0, 0);
+      }
+      75% {
+        top: 80%;
+        left: 70%;
+        transform: translate(0, 0);
+      }
+      100% {
+        top: 20%;
+        left: 90%;
+        transform: translate(-100%, 0);
+      }
+    }
+    
+    @keyframes circleAround {
+      0% {
+        transform: translate(-50%, -50%) rotate(0deg) translateY(-150px) rotate(0deg);
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg) translateY(-150px) rotate(-360deg);
+      }
+    }
+    
+    @keyframes floatAround {
+      0% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(0deg) scale(1);
+      }
+      25% {
+        top: 30%;
+        left: 30%;
+        transform: translate(-50%, -50%) rotate(5deg) scale(0.9);
+      }
+      50% {
+        top: 70%;
+        left: 40%;
+        transform: translate(-50%, -50%) rotate(-5deg) scale(1.1);
+      }
+      75% {
+        top: 40%;
+        left: 70%;
+        transform: translate(-50%, -50%) rotate(5deg) scale(0.9);
+      }
+      100% {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(0deg) scale(1);
+      }
+    }
+    
+    @keyframes speedLines {
+      0% {
+        transform: translate(-100%, -50%) scale(0.5);
+        opacity: 0;
+      }
+      10% {
+        transform: translate(-80%, -50%) scale(0.7);
+        opacity: 1;
+      }
+      90% {
+        transform: translate(80%, -50%) scale(0.7);
+        opacity: 1;
+      }
+      100% {
+        transform: translate(100%, -50%) scale(0.5);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes bounceAround {
+      0%, 100% {
+        top: 80%;
+        left: 20%;
+        animation-timing-function: ease-out;
+      }
+      25% {
+        top: 20%;
+        left: 30%;
+        animation-timing-function: ease-in;
+      }
+      50% {
+        top: 80%;
+        left: 50%;
+        animation-timing-function: ease-out;
+      }
+      75% {
+        top: 20%;
+        left: 70%;
+        animation-timing-function: ease-in;
+      }
+    }
+    
+    @keyframes spiral {
+      0% {
+        transform: translate(-50%, -50%) rotate(0) translateY(0) scale(0.5);
+        opacity: 0;
+      }
+      20% {
+        transform: translate(-50%, -50%) rotate(72deg) translateY(-50px) scale(0.7);
+        opacity: 1;
+      }
+      40% {
+        transform: translate(-50%, -50%) rotate(144deg) translateY(-100px) scale(0.9);
+      }
+      60% {
+        transform: translate(-50%, -50%) rotate(216deg) translateY(-150px) scale(1.1);
+      }
+      80% {
+        transform: translate(-50%, -50%) rotate(288deg) translateY(-200px) scale(0.9);
+      }
+      100% {
+        transform: translate(-50%, -50%) rotate(360deg) translateY(-250px) scale(0.7);
+        opacity: 0;
+      }
+    }
+    
+    @keyframes topCenter {
+      0% {
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -100%);
+      }
+      10% {
+        top: 10%;
+        left: 50%;
+        transform: translate(-50%, 0) scale(1.2);
+      }
+      90% {
+        top: 10%;
+        left: 50%;
+        transform: translate(-50%, 0) scale(1.2);
+      }
+      100% {
+        top: 0;
+        left: 50%;
+        transform: translate(-50%, -100%);
+      }
+    }
+    
+    @keyframes sideToSide {
+      0% {
+        top: 50%;
+        left: 0;
+        transform: translate(-100%, -50%);
+      }
+      10% {
+        top: 50%;
+        left: 10%;
+        transform: translate(0, -50%);
+      }
+      45% {
+        top: 50%;
+        left: 45%;
+        transform: translate(0, -50%);
+      }
+      55% {
+        top: 50%;
+        left: 55%;
+        transform: translate(0, -50%);
+      }
+      90% {
+        top: 50%;
+        left: 90%;
+        transform: translate(0, -50%);
+      }
+      100% {
+        top: 50%;
+        left: 100%;
+        transform: translate(100%, -50%);
+      }
+    }
+    
+    @keyframes elasticScale {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      25% {
+        transform: scale(1.3);
+      }
+      50% {
+        transform: scale(0.7);
+      }
+      75% {
+        transform: scale(1.1);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    /* 自由配置されている字幕用のベーススタイル */
+    .subtitle-free {
+      position: absolute;
+      width: auto;
+      max-width: var(--subtitle-max-width);
+      margin: 0;
+      white-space: nowrap;
+      z-index: 1000;
+      /* デフォルトで中央に配置 */
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    
+    @keyframes fireEffect {
+      0% {
+        text-shadow: 0 0 20px #ff0000, 0 0 30px #ff5500, 0 0 40px #ff8800;
+        transform: scale(0.95);
+      }
+      50% {
+        text-shadow: 0 0 40px #ff0000, 0 0 60px #ff5500, 0 0 80px #ff8800;
+        transform: scale(1.05);
+      }
+      100% {
+        text-shadow: 0 0 20px #ff0000, 0 0 30px #ff5500, 0 0 40px #ff8800;
+        transform: scale(0.95);
+      }
+    }
+    
+    @keyframes strobeLights {
+      0%, 20%, 40%, 60%, 80% {
+        color: #fff;
+        text-shadow: 0 0 20px #ff00ff, 0 0 30px #00ffff, 0 0 40px #ffff00;
+        background-color: var(--subtitle-bg);
+      }
+      10%, 30%, 50%, 70%, 90% {
+        color: #000;
+        text-shadow: 0 0 20px #ffffff;
+        background-color: rgba(255, 255, 255, 0.9);
+      }
+    }
+    
+    @keyframes threedRotation {
+      0% {
+        transform: perspective(500px) rotateY(0deg);
+      }
+      100% {
+        transform: perspective(500px) rotateY(360deg);
+      }
+    }
+    
+    @keyframes zoom3d {
+      0% {
+        transform: perspective(500px) scale(0.5) translateZ(-100px);
+        opacity: 0;
+      }
+      50% {
+        transform: perspective(500px) scale(1.2) translateZ(50px); 
+        opacity: 1;
+      }
+      100% {
+        transform: perspective(500px) scale(1) translateZ(0);
+        opacity: 1;
+      }
+    }
+    
+    /* コントロールパネル */
+    .control-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: var(--control-bg);
+      color: var(--control-color);
+      padding: 10px;
+      border-radius: 10px;
+      z-index: 100;
+      width: min(300px, 90vw);
+      max-height: 80vh;
+      overflow-y: auto;
+      font-size: 14px;
+      display: block;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    .panel-section {
+      margin-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      padding-bottom: 10px;
+    }
+    
+    .panel-section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+    
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    
+    .section-header h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    
+    .section-content {
+      display: block;
+    }
+    
+    .section-content.hidden {
+      display: none;
+    }
+    
+    .control-panel button {
+      background-color: var(--button-bg);
+      border: none;
+      color: var(--control-color);
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 13px;
+      margin: 3px 0;
+      cursor: pointer;
+      border-radius: 4px;
+      width: 100%;
+      transition: background-color 0.2s;
+      font-family: var(--primary-font);
+    }
+    
+    .control-panel button:hover {
+      background-color: var(--button-hover);
+    }
+    
+    .toggle-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: var(--control-bg);
+      color: var(--control-color);
+      padding: 8px 12px;
+      border-radius: 4px;
+      z-index: 101;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+    
+    /* スライダー用のスタイル */
+    .control-panel input[type=range] {
+      width: 100%;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    
+    /* テキスト入力用のスタイル */
+    .control-panel input[type=text] {
+      width: 100%;
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      font-family: var(--primary-font);
+    }
+    
+    /* アクティブなボタンのスタイル */
+    .control-panel button.active {
+      background-color: var(--button-active);
+    }
+    
+    /* モバイル対応 */
+    @media (max-width: 768px) {
+      .control-panel {
+        width: min(250px, 80vw);
+        font-size: 12px;
+      }
+      
+      .control-panel button {
+        padding: 10px 8px;
+        font-size: 14px;
+      }
+      
+      .toggle-panel {
+        padding: 8px 10px;
+        font-size: 14px;
+      }
+      
+      .section-header h3 {
+        font-size: 14px;
+      }
+      
+      /* より大きなタッチターゲット */
+      .control-panel input[type=range],
+      .control-panel input[type=text] {
+        height: 40px;
+      }
+    }
+    
+    /* 縦長ビデオ用のコンテナ */
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+    }
+    
+    .aspect-ratio-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* 9:16アスペクト比を保証するスタイル */
+    @media (min-aspect-ratio: 9/16) {
+      .aspect-ratio-container {
+        width: calc(100vh * 9 / 16);
+        height: 100%;
+      }
+    }
+    
+    @media (max-aspect-ratio: 9/16) {
+      .aspect-ratio-container {
+        width: 100%;
+        height: calc(100vw * 16 / 9);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="video-container">
+    <div class="aspect-ratio-container" id="threeContainer"></div>
+  </div>
+  
+  <div class="subtitle-container">
+    <div class="subtitle-standard">Three.jsで3D世界を創造！</div>
+  </div>
+  
+  <div class="toggle-panel" id="togglePanel">表示/非表示</div>
+  
+  <div class="control-panel" id="controlPanel">
+    <!-- 字幕テキストセクション -->
+    <div class="panel-section">
+      <div class="section-header" id="textHeader">
+        <h3>字幕テキスト</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="textContent">
+        <input type="text" id="customText" placeholder="カスタムテキスト入力" maxlength="100">
+        <button id="applyText">適用</button>
+        <button id="text1">Three.jsで3D世界を創造！</button>
+        <button id="text2">9:16の縦長ショート動画用</button>
+        <button id="text3">字幕機能でSNS映えする</button>
+      </div>
+    </div>
+    
+    <!-- 字幕スタイルセクション -->
+    <div class="panel-section">
+      <div class="section-header" id="styleHeader">
+        <h3>字幕スタイル</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="styleContent">
+        <button id="standard">標準字幕</button>
+        <button id="animated">アニメーション字幕</button>
+        <button id="colorful">カラフル字幕</button>
+        <button id="comic">漫画風字幕</button>
+        <button id="3d">3D風字幕</button>
+        <button id="karaoke">カラオケ風字幕</button>
+        <button id="typewriter">タイプライター字幕</button>
+        <button id="neon">ネオン字幕</button>
+      </div>
+    </div>
+    
+    <!-- 字幕アクション①（基本的なアニメーション） -->
+    <div class="panel-section">
+      <div class="section-header" id="action1Header">
+        <h3>字幕アクション①</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="action1Content">
+        <button id="action-none">アクションなし</button>
+        <button id="action-left-in">左からスライドイン</button>
+        <button id="action-right-in">右からスライドイン</button>
+        <button id="action-bottom-in">下からスライドイン</button>
+        <button id="action-left-out">左へスライドアウト</button>
+        <button id="action-right-out">右へスライドアウト</button>
+        <button id="action-bottom-out">下へスライドアウト</button>
+        <button id="action-bounce">バウンス効果</button>
+        <button id="action-pulse">拍動効果</button>
+        <button id="action-rotate">回転して登場</button>
+        <button id="action-shake">シェイク効果</button>
+      </div>
+    </div>
+    
+    <!-- 字幕アクション②（視聴者の注意を引く派手なアニメーション） -->
+    <div class="panel-section">
+      <div class="section-header" id="action2Header">
+        <h3>字幕アクション②（注目効果）</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="action2Content">
+        <button id="action-explode">爆発効果</button>
+        <button id="action-flip">フリップ効果</button>
+        <button id="action-rainbow">レインボーカラー</button>
+        <button id="action-spotlight">スポットライト効果</button>
+        <button id="action-heartbeat">ハートビート効果</button>
+        <button id="action-glitch">グリッチ効果</button>
+        <button id="action-ultra-bounce">超弾むバウンス</button>
+        <button id="action-ultra-shake">激しい振動</button>
+        <button id="action-fire">炎エフェクト</button>
+        <button id="action-strobe">ストロボ効果</button>
+        <button id="action-3d-rotation">3D回転</button>
+        <button id="action-zoom-3d">3Dズームイン</button>
+      </div>
+    </div>
+    
+    <!-- 字幕アクション③（自由配置アニメーション） -->
+    <div class="panel-section">
+      <div class="section-header" id="action3Header">
+        <h3>字幕アクション③（自由配置）</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="action3Content">
+        <button id="action-none-free">自由配置解除</button>
+        <button id="action-corner-to-corner">対角線移動</button>
+        <button id="action-zigzag">ジグザグ移動</button>
+        <button id="action-circle-around">円形回転</button>
+        <button id="action-float-around">ふわふわ浮遊</button>
+        <button id="action-speed-lines">高速横切り</button>
+        <button id="action-bounce-around">バウンド移動</button>
+        <button id="action-spiral">らせん状回転</button>
+        <button id="action-top-center">上部から登場</button>
+        <button id="action-side-to-side">左右横断</button>
+        <button id="action-elastic-scale">弾力的登場</button>
+      </div>
+    </div>
+  </div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // WebGLサポート検出
+    function checkWebGLSupport() {
+      try {
+        return !!window.WebGLRenderingContext && 
+               !!document.createElement('canvas').getContext('experimental-webgl');
+      } catch(e) {
+        return false;
+      }
+    }
+    
+    // エラーメッセージを表示する関数
+    function showError(message) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.textContent = message;
+      document.body.appendChild(errorDiv);
+    }
+    
+    // WebGLをサポートしていない場合
+    if (!checkWebGLSupport()) {
+      showError('お使いのブラウザはWebGLをサポートしていません。最新のブラウザでご覧ください。');
+      // 以降の処理を中止
+      throw new Error('WebGL not supported');
+    }
+    
+    // グローバル変数
+    let scene, camera, renderer, particlesMesh, sphere;
+    let clock;
+    let animationFrameId;
+    let karaokeInterval;
+    let autoHideTimeout;
+    let resizeTimer;
+    
+    // 初期化関数
+    function init() {
+      // Three.jsシーンのセットアップ
+      initThreeJS();
+      
+      // 字幕システムのセットアップ
+      initSubtitleSystem();
+      
+      // イベントリスナーの設定
+      setupEventListeners();
+      
+      // アニメーション開始
+      animate();
+    }
+    
+    // Three.jsの初期化
+    function initThreeJS() {
+      // コンテナ取得
+      const container = document.getElementById('threeContainer');
+      
+      // シーンのセットアップ
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0a2a);
+      
+      // 縦長の画面比率を維持するためのカメラ設定（9:16を保証）
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const aspectRatio = width / height;
+      
+      // カメラのセットアップ
+      camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+      camera.position.z = 5;
+      
+      // レンダラーのセットアップ
+      try {
+        renderer = new THREE.WebGLRenderer({ 
+          antialias: true,
+          powerPreference: 'high-performance',
+          alpha: true
+        });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // パフォーマンス最適化
+        container.appendChild(renderer.domElement);
+      } catch (e) {
+        showError('WebGLレンダラーの初期化に失敗しました：' + e.message);
+        return;
+      }
+      
+      // 背景の粒子を作成（改良版）
+      createParticles();
+      
+      // 中央に球体を配置
+      createSphere();
+      
+      // クロックの初期化
+      clock = new THREE.Clock();
+    }
+    
+    // 粒子の作成（改良版）
+    function createParticles() {
+      const particlesGeometry = new THREE.BufferGeometry();
+      const particlesCount = window.innerWidth < 768 ? 500 : 1000; // モバイルデバイスでは粒子数を減らす
+      
+      const posArray = new Float32Array(particlesCount * 3);
+      
+      for (let i = 0; i < particlesCount * 3; i += 3) {
+        // 縦長の空間に粒子を配置（9:16のアスペクト比を考慮）
+        posArray[i] = (Math.random() - 0.5) * 10;
+        posArray[i + 1] = (Math.random() - 0.5) * 18; // 縦に広い範囲
+        posArray[i + 2] = (Math.random() - 0.5) * 10;
+      }
+      
+      particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+      
+      // カスタム点サイズを設定（WebGLの機能を使用）
+      const sizes = new Float32Array(particlesCount);
+      for (let i = 0; i < particlesCount; i++) {
+        sizes[i] = Math.random() * 2 + 0.5;
+      }
+      particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+      
+      // 頂点シェーダーとフラグメントシェーダー
+      const vertexShader = `
+        attribute float size;
+        void main() {
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = size * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `;
+      
+      const fragmentShader = `
+        void main() {
+          float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+          if (distance > 0.5) {
+            discard;
+          }
+          gl_FragColor = vec4(0.53, 0.8, 1.0, 1.0 - (distance * 2.0));
+        }
+      `;
+      
+      // カスタムシェーダーマテリアル
+      const particlesMaterial = new THREE.ShaderMaterial({
+        uniforms: {},
+        vertexShader,
+        fragmentShader,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      
+      particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+      scene.add(particlesMesh);
+    }
+    
+    // 球体の作成
+    function createSphere() {
+      const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+      const sphereMaterial = new THREE.MeshBasicMaterial({
+        color: 0x3366ff,
+        wireframe: true
+      });
+      sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      scene.add(sphere);
+    }
+    
+    // 字幕システムの初期化
+    function initSubtitleSystem() {
+      // 字幕関連の設定
+      subtitles = {
+        standard: "標準的な字幕表示です。シンプルで読みやすいデザイン",
+        animated: "アニメーション付きの字幕です。フェードインしながら登場",
+        colorful: "カラフルな字幕表示。グラデーションや装飾を加えたデザイン",
+        comic: "漫画風の吹き出し字幕。キャラクターのセリフみたいな感じ",
+        "3d": "立体的な3D風の字幕。影を使った奥行き感のある表示",
+        karaoke: "カラオケ風の字幕表示。時間とともに色が変わります",
+        typewriter: "タイプライター風の字幕。文字が1つずつ現れます",
+        neon: "ネオン風の字幕表示。光る感じのデザイン"
+      };
+      
+      texts = {
+        text1: "Three.jsで3D世界を創造！",
+        text2: "9:16の縦長ショート動画用",
+        text3: "字幕機能でSNS映えする"
+      };
+      
+      // 字幕アクションの定義
+      // 基本的なアニメーション（アクション①）
+      basicActions = {
+        none: { animation: "", duration: 0 },
+        'left-in': { animation: "slideInFromLeft 0.8s forwards", duration: 800 },
+        'right-in': { animation: "slideInFromRight 0.8s forwards", duration: 800 },
+        'bottom-in': { animation: "slideInFromBottom 0.8s forwards", duration: 800 },
+        'left-out': { animation: "slideOutToLeft 0.8s forwards", duration: 800 },
+        'right-out': { animation: "slideOutToRight 0.8s forwards", duration: 800 },
+        'bottom-out': { animation: "slideOutToBottom 0.8s forwards", duration: 800 },
+        'bounce': { animation: "bounce 1s infinite", duration: 0 },
+        'pulse': { animation: "pulse 1.5s infinite", duration: 0 },
+        'rotate': { animation: "rotateIn 0.8s forwards", duration: 800 },
+        'shake': { animation: "shake 0.5s infinite", duration: 0 }
+      };
+      
+      // 派手なアニメーション（アクション②）
+      attentionActions = {
+        'explode': { animation: "explode 0.7s forwards", duration: 700 },
+        'flip': { animation: "flip 0.8s forwards", duration: 800 },
+        'rainbow': { animation: "rainbow 2s infinite", duration: 0, isColorEffect: true },
+        'spotlight': { animation: "spotlight 1.5s infinite", duration: 0 },
+        'heartbeat': { animation: "heartbeat 1s infinite", duration: 0 },
+        'glitch': { animation: "glitch 0.5s infinite", duration: 0 },
+        'ultra-bounce': { animation: "ultraBounce 1.5s infinite", duration: 0 },
+        'ultra-shake': { animation: "ultraShake 0.5s infinite", duration: 0 },
+        'fire': { animation: "fireEffect 1.5s infinite", duration: 0, isColorEffect: true },
+        'strobe': { animation: "strobeLights 1s infinite", duration: 0 },
+        '3d-rotation': { animation: "threedRotation 3s infinite linear", duration: 0 },
+        'zoom-3d': { animation: "zoom3d 1s forwards", duration: 1000 }
+      };
+      
+      // 自由配置アニメーション（アクション③）
+      freePositionActions = {
+        'none-free': { animation: "", duration: 0, useFreePosition: true },
+        'corner-to-corner': { animation: "cornerToCorner 8s infinite alternate", duration: 0, useFreePosition: true },
+        'zigzag': { animation: "zigzag 10s infinite", duration: 0, useFreePosition: true },
+        'circle-around': { animation: "circleAround 8s infinite linear", duration: 0, useFreePosition: true, centered: true },
+        'float-around': { animation: "floatAround 15s infinite ease-in-out", duration: 0, useFreePosition: true },
+        'speed-lines': { animation: "speedLines 3s infinite", duration: 0, useFreePosition: true, horizontalCenter: true },
+        'bounce-around': { animation: "bounceAround 12s infinite", duration: 0, useFreePosition: true },
+        'spiral': { animation: "spiral 8s infinite", duration: 0, useFreePosition: true, centered: true },
+        'top-center': { animation: "topCenter 5s infinite", duration: 0, useFreePosition: true },
+        'side-to-side': { animation: "sideToSide 10s infinite", duration: 0, useFreePosition: true },
+        'elastic-scale': { animation: "elasticScale 1s forwards", duration: 1000, useFreePosition: true, centered: true }
+      };
+      
+      // 初期値の設定
+      currentSubtitle = "standard";
+      currentText = texts.text1;
+      currentBasicAction = "none";
+      currentAttentionAction = null;
+      currentFreePositionAction = null;
+      
+      // コントロールパネルの初期表示設定
+      const controlPanel = document.getElementById('controlPanel');
+      controlPanel.style.display = 'block';
+      
+      // 初期状態のアクティブボタン表示
+      updateActiveButtons('style', 'standard');
+      updateActiveButtons('action1', 'none');
+      
+      // 初期字幕の表示
+      updateSubtitle();
+    }
+    
+    // イベントリスナーのセットアップ
+    function setupEventListeners() {
+      // ウィンドウリサイズ対応（デバウンス処理付き）
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(onWindowResize, 250);
+      });
+      
+      // 字幕テキスト入力とボタン
+      document.getElementById('customText').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          const customText = e.target.value.trim();
+          if (customText) {
+            changeSubtitleText(customText);
+          }
+        }
+      });
+      
+      document.getElementById('applyText').addEventListener('click', () => {
+        const customText = document.getElementById('customText').value.trim();
+        if (customText) {
+          changeSubtitleText(customText);
+        }
+      });
+      
+      document.getElementById('text1').addEventListener('click', () => changeSubtitleText('text1'));
+      document.getElementById('text2').addEventListener('click', () => changeSubtitleText('text2'));
+      document.getElementById('text3').addEventListener('click', () => changeSubtitleText('text3'));
+      
+      // 字幕スタイル
+      document.getElementById('standard').addEventListener('click', () => changeSubtitleStyle('standard'));
+      document.getElementById('animated').addEventListener('click', () => changeSubtitleStyle('animated'));
+      document.getElementById('colorful').addEventListener('click', () => changeSubtitleStyle('colorful'));
+      document.getElementById('comic').addEventListener('click', () => changeSubtitleStyle('comic'));
+      document.getElementById('3d').addEventListener('click', () => changeSubtitleStyle('3d'));
+      document.getElementById('karaoke').addEventListener('click', () => changeSubtitleStyle('karaoke'));
+      document.getElementById('typewriter').addEventListener('click', () => changeSubtitleStyle('typewriter'));
+      document.getElementById('neon').addEventListener('click', () => changeSubtitleStyle('neon'));
+      
+      // 基本アクション
+      document.getElementById('action-none').addEventListener('click', () => changeBasicAction('none'));
+      document.getElementById('action-left-in').addEventListener('click', () => changeBasicAction('left-in'));
+      document.getElementById('action-right-in').addEventListener('click', () => changeBasicAction('right-in'));
+      document.getElementById('action-bottom-in').addEventListener('click', () => changeBasicAction('bottom-in'));
+      document.getElementById('action-left-out').addEventListener('click', () => changeBasicAction('left-out'));
+      document.getElementById('action-right-out').addEventListener('click', () => changeBasicAction('right-out'));
+      document.getElementById('action-bottom-out').addEventListener('click', () => changeBasicAction('bottom-out'));
+      document.getElementById('action-bounce').addEventListener('click', () => changeBasicAction('bounce'));
+      document.getElementById('action-pulse').addEventListener('click', () => changeBasicAction('pulse'));
+      document.getElementById('action-rotate').addEventListener('click', () => changeBasicAction('rotate'));
+      document.getElementById('action-shake').addEventListener('click', () => changeBasicAction('shake'));
+      
+      // 注目アクション
+      document.getElementById('action-explode').addEventListener('click', () => changeAttentionAction('explode'));
+      document.getElementById('action-flip').addEventListener('click', () => changeAttentionAction('flip'));
+      document.getElementById('action-rainbow').addEventListener('click', () => changeAttentionAction('rainbow'));
+      document.getElementById('action-spotlight').addEventListener('click', () => changeAttentionAction('spotlight'));
+      document.getElementById('action-heartbeat').addEventListener('click', () => changeAttentionAction('heartbeat'));
+      document.getElementById('action-glitch').addEventListener('click', () => changeAttentionAction('glitch'));
+      document.getElementById('action-ultra-bounce').addEventListener('click', () => changeAttentionAction('ultra-bounce'));
+      document.getElementById('action-ultra-shake').addEventListener('click', () => changeAttentionAction('ultra-shake'));
+      document.getElementById('action-fire').addEventListener('click', () => changeAttentionAction('fire'));
+      document.getElementById('action-strobe').addEventListener('click', () => changeAttentionAction('strobe'));
+      document.getElementById('action-3d-rotation').addEventListener('click', () => changeAttentionAction('3d-rotation'));
+      document.getElementById('action-zoom-3d').addEventListener('click', () => changeAttentionAction('zoom-3d'));
+      
+      // 自由配置アクション
+      document.getElementById('action-none-free').addEventListener('click', () => changeFreePositionAction('none-free'));
+      document.getElementById('action-corner-to-corner').addEventListener('click', () => changeFreePositionAction('corner-to-corner'));
+      document.getElementById('action-zigzag').addEventListener('click', () => changeFreePositionAction('zigzag'));
+      document.getElementById('action-circle-around').addEventListener('click', () => changeFreePositionAction('circle-around'));
+      document.getElementById('action-float-around').addEventListener('click', () => changeFreePositionAction('float-around'));
+      document.getElementById('action-speed-lines').addEventListener('click', () => changeFreePositionAction('speed-lines'));
+      document.getElementById('action-bounce-around').addEventListener('click', () => changeFreePositionAction('bounce-around'));
+      document.getElementById('action-spiral').addEventListener('click', () => changeFreePositionAction('spiral'));
+      document.getElementById('action-top-center').addEventListener('click', () => changeFreePositionAction('top-center'));
+      document.getElementById('action-side-to-side').addEventListener('click', () => changeFreePositionAction('side-to-side'));
+      document.getElementById('action-elastic-scale').addEventListener('click', () => changeFreePositionAction('elastic-scale'));
+      
+      // セクションのトグル機能
+      setupToggleSections();
+      
+      // コントロールパネルの表示/非表示
+      document.getElementById('togglePanel').addEventListener('click', toggleControlPanel);
+      
+      // ページを離れる際のクリーンアップ
+      window.addEventListener('beforeunload', cleanupResources);
+    }
+    
+    // セクションのトグル機能
+    function setupToggleSections() {
+      const sections = [
+        { header: 'textHeader', content: 'textContent' },
+        { header: 'styleHeader', content: 'styleContent' },
+        { header: 'action1Header', content: 'action1Content' },
+        { header: 'action2Header', content: 'action2Content' },
+        { header: 'action3Header', content: 'action3Content' }
+      ];
+      
+      sections.forEach(section => {
+        const headerElem = document.getElementById(section.header);
+        const contentElem = document.getElementById(section.content);
+        
+        headerElem.addEventListener('click', () => {
+          contentElem.classList.toggle('hidden');
+          const arrow = headerElem.querySelector('span');
+          arrow.textContent = contentElem.classList.contains('hidden') ? '▶' : '▼';
+        });
+      });
+    }
+    
+    // コントロールパネル表示切替
+    function toggleControlPanel() {
+      const controlPanel = document.getElementById('controlPanel');
+      if (controlPanel.style.display === 'none') {
+        controlPanel.style.display = 'block';
+      } else {
+        controlPanel.style.display = 'none';
+      }
+    }
+    
+    // 字幕スタイル変更関数
+    function changeSubtitleStyle(style) {
+      currentSubtitle = style;
+      updateSubtitle();
+      
+      // ボタンのアクティブ状態を更新
+      updateActiveButtons('style', style);
+    }
+    
+    // 字幕アクション変更関数
+    function changeBasicAction(action) {
+      currentBasicAction = action;
+      updateSubtitle();
+      
+      // ボタンのアクティブ状態を更新
+      updateActiveButtons('action1', action);
+      
+      // アウトアクションの場合、一定時間後に再度表示する
+      if (action.includes('-out')) {
+        if (autoHideTimeout) {
+          clearTimeout(autoHideTimeout);
+        }
+        
+        autoHideTimeout = setTimeout(() => {
+          // 同じ字幕を再表示するために"none"アクションで更新
+          currentBasicAction = "none";
+          updateSubtitle();
+          updateActiveButtons('action1', 'none');
+        }, basicActions[action].duration + 200);
+      }
+    }
+    
+    // 注目を引くアクション変更関数
+    function changeAttentionAction(action) {
+      // 同じアクションが選択された場合はクリア
+      if (currentAttentionAction === action) {
+        currentAttentionAction = null;
+      } else {
+        currentAttentionAction = action;
+      }
+      
+      updateSubtitle();
+      
+      // ボタンのアクティブ状態を更新
+      updateActiveButtons('action2', currentAttentionAction);
+    }
+    
+    // 自由配置アクション変更関数
+    function changeFreePositionAction(action) {
+      // 「自由配置解除」が選択された場合は自由配置を解除
+      if (action === 'none-free') {
+        currentFreePositionAction = null;
+      } 
+      // 同じアクションが選択された場合は解除
+      else if (currentFreePositionAction === action) {
+        currentFreePositionAction = null;
+      } 
+      // 新しい自由配置アクションを適用
+      else {
+        currentFreePositionAction = action;
+      }
+      
+      updateSubtitle();
+      
+      // ボタンのアクティブ状態を更新
+      updateActiveButtons('action3', currentFreePositionAction || 'none-free');
+    }
+    
+    // ボタンのアクティブ状態を更新する関数
+    function updateActiveButtons(category, activeId) {
+      let buttons;
+      
+      if (category === 'style') {
+        buttons = document.querySelectorAll('#styleContent button');
+      } else if (category === 'action1') {
+        buttons = document.querySelectorAll('#action1Content button');
+      } else if (category === 'action2') {
+        buttons = document.querySelectorAll('#action2Content button');
+      } else if (category === 'action3') {
+        buttons = document.querySelectorAll('#action3Content button');
+      }
+      
+      if (buttons) {
+        buttons.forEach(button => {
+          if (button.id === activeId) {
+            button.classList.add('active');
+          } else {
+            button.classList.remove('active');
+          }
+        });
+      }
+    }
+    
+    // 字幕テキスト変更関数
+    function changeSubtitleText(text) {
+      if (typeof text === 'string' && texts[text]) {
+        currentText = texts[text];
+      } else {
+        currentText = text;
+      }
+      updateSubtitle();
+    }
+    
+    // タイプライター効果関数の改良版
+    function animateTypewriter(element, text, duration = 2000) {
+      const typingDelay = duration / text.length;
+      let charIndex = 0;
+      
+      // テキスト要素をクリア
+      element.textContent = '';
+      element.style.width = '0';
+      
+      // タイピングアニメーション
+      function typeChar() {
+        if (charIndex < text.length) {
+          element.textContent += text.charAt(charIndex);
+          // 日本語と英語で文字幅が異なることを考慮
+          element.style.width = `${(charIndex + 1) / text.length * 100}%`;
+          charIndex++;
+          setTimeout(typeChar, typingDelay);
+        }
+      }
+      
+      typeChar();
+    }
+    
+    // 字幕更新関数（スタイルとアクションを適用）
+    function updateSubtitle() {
+      // 字幕コンテナ取得
+      const subtitleContainer = document.querySelector('.subtitle-container');
+      
+      // 既存の字幕を削除
+      subtitleContainer.innerHTML = '';
+      
+      // カラオケ風のタイマーをクリア
+      if (karaokeInterval) {
+        clearInterval(karaokeInterval);
+      }
+      
+      // 新しい字幕を作成
+      const subtitleElement = document.createElement('div');
+      
+      // 自由配置アクションが有効な場合は特別なクラスを適用
+      if (currentFreePositionAction) {
+        subtitleElement.className = `subtitle-${currentSubtitle} subtitle-free`;
+      } else {
+        subtitleElement.className = `subtitle-${currentSubtitle}`;
+      }
+      
+      // スタイル別の特殊処理
+      if (currentSubtitle === 'karaoke') {
+        const textSpan = document.createElement('span');
+        textSpan.textContent = currentText;
+        const highlightSpan = document.createElement('span');
+        highlightSpan.className = 'highlight';
+        highlightSpan.textContent = currentText;
+        subtitleElement.appendChild(textSpan);
+        subtitleElement.appendChild(highlightSpan);
+        
+        // 改良したカラオケのアニメーション
+        const textLength = currentText.length;
+        const animationDuration = textLength * 200; // 文字数に応じた長さ
+        let startTime = Date.now();
+        
+        karaokeInterval = setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          const progress = (elapsed % animationDuration) / animationDuration;
+          highlightSpan.style.width = `${progress * 100}%`;
+          
+          // アニメーションをリセット
+          if (progress >= 1) {
+            startTime = Date.now();
+          }
+        }, 30);
+      } else if (currentSubtitle === 'typewriter') {
+        const textSpan = document.createElement('span');
+        textSpan.className = 'text';
+        textSpan.textContent = currentText;
+        subtitleElement.appendChild(textSpan);
+        
+        // タイプライター効果は後で適用
+      } else {
+        subtitleElement.textContent = currentText;
+      }
+      
+      // アニメーションを適用する
+      let animations = [];
+      
+      // 自由配置アニメーションがある場合、それを優先
+      if (currentFreePositionAction) {
+        animations.push(freePositionActions[currentFreePositionAction].animation);
+        
+        // 特定の自由配置の場合、位置調整
+        const freeAction = freePositionActions[currentFreePositionAction];
+        
+        if (freeAction.centered) {
+          subtitleElement.style.top = '50%';
+          subtitleElement.style.left = '50%';
+        } else if (freeAction.horizontalCenter) {
+          subtitleElement.style.left = '50%';
+        }
+        
+        // 注目アクションも適用（追加アニメーション）
+        if (currentAttentionAction) {
+          animations.push(attentionActions[currentAttentionAction].animation);
+          
+          // 色効果を持つアニメーションの場合
+          if (attentionActions[currentAttentionAction].isColorEffect) {
+            if (currentAttentionAction === 'rainbow') {
+              subtitleElement.style.color = 'white';
+            } else if (currentAttentionAction === 'fire') {
+              subtitleElement.style.color = '#ffffff';
+            }
+          }
+        }
+      } else {
+        // 通常の固定位置アニメーション
+        // 基本アクション
+        if (currentBasicAction !== 'none') {
+          animations.push(basicActions[currentBasicAction].animation);
+        }
+        
+        // 注目アクション
+        if (currentAttentionAction) {
+          animations.push(attentionActions[currentAttentionAction].animation);
+          
+          // 色効果を持つアニメーションの場合
+          if (attentionActions[currentAttentionAction].isColorEffect) {
+            if (currentAttentionAction === 'rainbow') {
+              subtitleElement.style.color = 'white';
+            } else if (currentAttentionAction === 'fire') {
+              subtitleElement.style.color = '#ffffff';
+            }
+          }
+        }
+      }
+      
+      // アニメーションを適用
+      if (animations.length > 0) {
+        subtitleElement.style.animation = animations.join(', ');
+      }
+      
+      subtitleContainer.appendChild(subtitleElement);
+      
+      // タイプライター効果を適用（タイプライター字幕の場合）
+      if (currentSubtitle === 'typewriter') {
+        const textSpan = subtitleElement.querySelector('.text');
+        if (textSpan) {
+          // 少し遅延を入れて実行（DOMが反映された後）
+          setTimeout(() => {
+            animateTypewriter(textSpan, currentText, 3000);
+          }, 50);
+        }
+      }
+      
+      // アニメーション付きの場合、アニメーションをリセット
+      if (currentSubtitle === 'animated' && !currentFreePositionAction) {
+        void subtitleElement.offsetWidth; // リフロー
+        subtitleElement.style.animation = 'none';
+        void subtitleElement.offsetWidth; // リフロー
+        subtitleElement.style.animation = '';
+      }
+    }
+    
+    // ウィンドウリサイズ時の処理
+    function onWindowResize() {
+      const container = document.getElementById('threeContainer');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      
+      // カメラのアスペクト比を更新
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      
+      // レンダラーのサイズを更新
+      if (renderer) {
+        renderer.setSize(width, height);
+      }
+    }
+    
+    // リソースをクリーンアップする関数
+    function cleanupResources() {
+      // アニメーションフレームをキャンセル
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+      
+      // カラオケインターバルをクリア
+      if (karaokeInterval) {
+        clearInterval(karaokeInterval);
+      }
+      
+      // 自動非表示タイマーをクリア
+      if (autoHideTimeout) {
+        clearTimeout(autoHideTimeout);
+      }
+      
+      // リサイズタイマーをクリア
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
+    }
+    
+    // アニメーションループ
+    function animate() {
+      animationFrameId = requestAnimationFrame(animate);
+      
+      try {
+        const deltaTime = Math.min(0.05, clock.getDelta()); // デルタタイムを制限してパフォーマンス安定化
+        
+        // 粒子を少しずつ動かす
+        if (particlesMesh) {
+          particlesMesh.rotation.y += deltaTime * 0.05;
+          particlesMesh.rotation.x += deltaTime * 0.03;
+        }
+        
+        // 球体を回転させる
+        if (sphere) {
+          sphere.rotation.y += deltaTime * 0.2;
+          sphere.rotation.x += deltaTime * 0.1;
+        }
+        
+        // レンダリング
+        if (renderer && scene && camera) {
+          renderer.render(scene, camera);
+        }
+      } catch (e) {
+        console.error('アニメーションエラー:', e);
+        cancelAnimationFrame(animationFrameId);
+        showError('アニメーションの実行中にエラーが発生しました。ページを再読み込みしてください。');
+      }
+    }
+    
+    // 変数宣言
+    let subtitles, texts, basicActions, attentionActions, freePositionActions;
+    let currentSubtitle, currentText, currentBasicAction, currentAttentionAction, currentFreePositionAction;
+    
+    // アプリケーション初期化
+    try {
+      init();
+    } catch (e) {
+      console.error('初期化エラー:', e);
+      showError('アプリケーションの初期化中にエラーが発生しました: ' + e.message);
+    }
+  </script>
+</body>
+</html>

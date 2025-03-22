@@ -1,0 +1,2923 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Three.js粒子背景エフェクト - ショート動画向け強化版">
+  <title>Three.js 粒子背景エフェクト</title>
+  <style>
+    :root {
+      --control-bg: rgba(0, 0, 0, 0.7);
+      --control-color: white;
+      --button-bg: #4CAF50;
+      --button-hover: #45a049;
+      --button-active: #2196F3;
+      --preset-button: #7e57c2;
+      --preset-button-hover: #9575cd;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', Meiryo, sans-serif;
+    }
+    
+    body { 
+      margin: 0; 
+      overflow: hidden;
+      touch-action: manipulation;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+      overscroll-behavior: none;
+    }
+    
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* エラーメッセージ用のスタイル */
+    .error-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background-color: rgba(255, 0, 0, 0.7);
+      color: white;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      max-width: 80%;
+      text-align: center;
+      z-index: 1000;
+    }
+    
+    /* 縦長ビデオ用のコンテナ */
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+    }
+    
+    .aspect-ratio-container {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 100%;
+      height: 100%;
+    }
+    
+    /* 9:16アスペクト比を保証するスタイル */
+    @media (min-aspect-ratio: 9/16) {
+      .aspect-ratio-container {
+        width: calc(100vh * 9 / 16);
+        height: 100%;
+      }
+    }
+    
+    @media (max-aspect-ratio: 9/16) {
+      .aspect-ratio-container {
+        width: 100%;
+        height: calc(100vw * 16 / 9);
+      }
+    }
+    
+    /* コントロールパネル */
+    .control-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: var(--control-bg);
+      color: var(--control-color);
+      padding: 15px;
+      border-radius: 10px;
+      z-index: 100;
+      width: min(300px, 90vw);
+      max-height: 80vh;
+      overflow-y: auto;
+      font-size: 14px;
+      display: block;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    }
+    
+    .panel-section {
+      margin-bottom: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      padding-bottom: 10px;
+    }
+    
+    .panel-section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+    
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+    
+    .section-header h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: bold;
+    }
+    
+    .section-content {
+      display: block;
+    }
+    
+    .section-content.hidden {
+      display: none;
+    }
+    
+    .control-panel button {
+      background-color: var(--button-bg);
+      border: none;
+      color: var(--control-color);
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 13px;
+      margin: 3px 0;
+      cursor: pointer;
+      border-radius: 4px;
+      width: 100%;
+      transition: background-color 0.2s;
+    }
+    
+    .control-panel button:hover {
+      background-color: var(--button-hover);
+    }
+    
+    .toggle-panel {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: var(--control-bg);
+      color: var(--control-color);
+      padding: 8px 12px;
+      border-radius: 4px;
+      z-index: 101;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+    
+    /* スライダー用のスタイル */
+    .control-panel input[type=range] {
+      width: 100%;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    
+    /* テキスト入力用のスタイル */
+    .control-panel input[type=text], .control-panel input[type=number] {
+      width: 100%;
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      background-color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+    }
+    
+    /* アクティブなボタンのスタイル */
+    .control-panel button.active {
+      background-color: var(--button-active);
+    }
+    
+    /* モバイル対応 */
+    @media (max-width: 768px) {
+      .control-panel {
+        width: min(250px, 80vw);
+        font-size: 12px;
+      }
+      
+      .control-panel button {
+        padding: 10px 8px;
+        font-size: 14px;
+      }
+      
+      .toggle-panel {
+        padding: 8px 10px;
+        font-size: 14px;
+      }
+      
+      .section-header h3 {
+        font-size: 14px;
+      }
+      
+      /* より大きなタッチターゲット */
+      .control-panel input[type=range],
+      .control-panel input[type=text],
+      .control-panel input[type=number] {
+        height: 40px;
+      }
+    }
+    
+    /* カラーピッカーのコンテナ */
+    .color-pickers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 10px 0;
+    }
+    
+    .color-picker {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: calc(50% - 5px);
+    }
+    
+    .color-picker label {
+      margin-bottom: 5px;
+      font-size: 12px;
+    }
+    
+    .control-panel input[type=color] {
+      width: 100%;
+      height: 30px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    /* スライダーとその値を表示する部分 */
+    .slider-container {
+      margin: 10px 0;
+    }
+    
+    .slider-container label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .slider-container span {
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 2px 6px;
+      border-radius: 3px;
+      min-width: 40px;
+      text-align: center;
+    }
+    
+    /* グループ化された設定 */
+    .option-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    
+    .option-group button {
+      width: calc(50% - 2.5px);
+    }
+    
+    /* プリセットボタン */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    
+    .presets button {
+      width: calc(50% - 2.5px);
+    }
+    
+    /* おすすめプリセット */
+    .scene-presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    
+    .scene-presets button {
+      width: calc(50% - 2.5px);
+      background-color: var(--preset-button);
+    }
+    
+    .scene-presets button:hover {
+      background-color: var(--preset-button-hover);
+    }
+    
+    /* インタラクション設定 */
+    .interaction-options {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    
+    /* 追加コントロール */
+    .additional-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin: 10px 0;
+    }
+    
+    .overlay-text {
+      position: absolute;
+      left: 50%;
+      top: 35%;
+      transform: translate(-50%, -50%);
+      font-size: 3vw;
+      font-weight: bold;
+      color: white;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6);
+      z-index: 10;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 0.5s;
+      pointer-events: none;
+      width: 80%;
+      max-width: 600px;
+    }
+  </style>
+</head>
+<body>
+  <div class="video-container">
+    <div class="aspect-ratio-container" id="threeContainer"></div>
+    <div class="overlay-text" id="overlayText"></div>
+  </div>
+  
+  <div class="toggle-panel" id="togglePanel">表示/非表示</div>
+  
+  <div class="control-panel" id="controlPanel">
+    <!-- おすすめプリセットセクション -->
+    <div class="panel-section">
+      <div class="section-header" id="presetHeader">
+        <h3>おすすめプリセット</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="presetContent">
+        <div class="scene-presets">
+          <button id="scenePreset1">ネオンシティ</button>
+          <button id="scenePreset2">宇宙の星</button>
+          <button id="scenePreset3">春の桜</button>
+          <button id="scenePreset4">花火大会</button>
+          <button id="scenePreset5">水中の泡</button>
+          <button id="scenePreset6">夢幻</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- インタラクション設定 -->
+    <div class="panel-section">
+      <div class="section-header" id="interactionHeader">
+        <h3>インタラクション</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="interactionContent">
+        <div class="interaction-options">
+          <button id="toggleMouseFollow">マウス追従: OFF</button>
+          <button id="toggleMouseRepel">マウス反発: OFF</button>
+          <button id="toggleAutoRotate">自動回転: ON</button>
+        </div>
+        <div class="slider-container">
+          <label for="interactionStrength">
+            インタラクション強度
+            <span id="interactionStrengthValue">1</span>
+          </label>
+          <input type="range" id="interactionStrength" min="0.1" max="3" value="1" step="0.1">
+        </div>
+      </div>
+    </div>
+    
+    <!-- アニメーション設定 -->
+    <div class="panel-section">
+      <div class="section-header" id="animationHeader">
+        <h3>アニメーション</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content" id="animationContent">
+        <div class="option-group">
+          <button id="animationNone" class="active">通常</button>
+          <button id="animationExplosion">爆発</button>
+          <button id="animationPulsate">鼓動</button>
+          <button id="animationVortex">渦巻</button>
+        </div>
+        <div class="slider-container">
+          <label for="animationSpeed">
+            アニメーション速度
+            <span id="animationSpeedValue">1</span>
+          </label>
+          <input type="range" id="animationSpeed" min="0.1" max="10" value="1" step="0.1">
+        </div>
+        <div class="slider-container">
+          <label for="animationIntensity">
+            アニメーション強度
+            <span id="animationIntensityValue">1</span>
+          </label>
+          <input type="range" id="animationIntensity" min="0.1" max="5" value="1" step="0.1">
+        </div>
+      </div>
+    </div>
+  
+    <!-- 基本設定セクション -->
+    <div class="panel-section">
+      <div class="section-header" id="basicHeader">
+        <h3>基本設定</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content hidden" id="basicContent">
+        <!-- 色設定 -->
+        <h4>色設定</h4>
+        <div class="color-pickers">
+          <div class="color-picker">
+            <label for="particleColor">粒子の色</label>
+            <input type="color" id="particleColor" value="#87ccff">
+          </div>
+          <div class="color-picker">
+            <label for="bgColor">背景色</label>
+            <input type="color" id="bgColor" value="#0a0a2a">
+          </div>
+        </div>
+        <div class="color-pickers">
+          <div class="color-picker">
+            <label for="sphereColor">球体の色</label>
+            <input type="color" id="sphereColor" value="#3366ff">
+          </div>
+          <div class="color-picker">
+            <label for="secondaryColor">グラデーション色</label>
+            <input type="color" id="secondaryColor" value="#ff3366">
+          </div>
+        </div>
+        
+        <!-- プリセット -->
+        <h4>カラープリセット</h4>
+        <div class="presets">
+          <button id="preset1">ブルー系</button>
+          <button id="preset2">パープル系</button>
+          <button id="preset3">オレンジ系</button>
+          <button id="preset4">グリーン系</button>
+          <button id="preset5">ネオン系</button>
+          <button id="preset6">パステル系</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 粒子設定セクション -->
+    <div class="panel-section">
+      <div class="section-header" id="particleHeader">
+        <h3>粒子設定</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content hidden" id="particleContent">
+        <!-- 粒子数 -->
+        <div class="slider-container">
+          <label for="particleCount">
+            粒子数
+            <span id="particleCountValue">1000</span>
+          </label>
+          <input type="range" id="particleCount" min="100" max="10000" value="1000" step="100">
+        </div>
+        
+        <!-- 粒子サイズ -->
+        <div class="slider-container">
+          <label for="particleSize">
+            粒子サイズ
+            <span id="particleSizeValue">1</span>
+          </label>
+          <input type="range" id="particleSize" min="0.5" max="10" value="1" step="0.1">
+        </div>
+        
+        <!-- 回転速度 -->
+        <div class="slider-container">
+          <label for="particleSpeed">
+            回転速度
+            <span id="particleSpeedValue">1</span>
+          </label>
+          <input type="range" id="particleSpeed" min="0" max="20" value="1" step="0.1">
+        </div>
+        
+        <!-- 粒子分布範囲 -->
+        <div class="slider-container">
+          <label for="particleSpread">
+            分布範囲
+            <span id="particleSpreadValue">10</span>
+          </label>
+          <input type="range" id="particleSpread" min="5" max="50" value="10" step="1">
+        </div>
+        
+        <!-- 粒子形状 -->
+        <h4>粒子形状</h4>
+        <div class="option-group">
+          <button id="shapeCircle" class="active">円形</button>
+          <button id="shapeSquare">四角形</button>
+          <button id="shapeStar">星形</button>
+          <button id="shapeRandom">ランダム</button>
+          <button id="shapeHeart">ハート</button>
+          <button id="shapeCherry">桜</button>
+          <button id="shapeBubble">泡</button>
+          <button id="shapeSnowflake">雪</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 球体設定セクション -->
+    <div class="panel-section">
+      <div class="section-header" id="sphereHeader">
+        <h3>球体設定</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content hidden" id="sphereContent">
+        <!-- 球体表示切替 -->
+        <button id="toggleSphere">球体表示/非表示</button>
+        
+        <!-- 球体サイズ -->
+        <div class="slider-container">
+          <label for="sphereSize">
+            球体サイズ
+            <span id="sphereSizeValue">1</span>
+          </label>
+          <input type="range" id="sphereSize" min="0.5" max="5" value="1" step="0.1">
+        </div>
+        
+        <!-- 球体回転速度 -->
+        <div class="slider-container">
+          <label for="sphereSpeed">
+            回転速度
+            <span id="sphereSpeedValue">1</span>
+          </label>
+          <input type="range" id="sphereSpeed" min="0" max="10" value="1" step="0.1">
+        </div>
+        
+        <!-- 球体スタイル -->
+        <h4>球体スタイル</h4>
+        <div class="option-group">
+          <button id="styleWireframe" class="active">ワイヤーフレーム</button>
+          <button id="styleSolid">ソリッド</button>
+          <button id="stylePoints">ポイント</button>
+          <button id="styleGlow">発光</button>
+          <button id="styleRings">リング</button>
+          <button id="styleGalaxy">銀河</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- エフェクト設定セクション -->
+    <div class="panel-section">
+      <div class="section-header" id="effectHeader">
+        <h3>特殊エフェクト</h3>
+        <span>▼</span>
+      </div>
+      <div class="section-content hidden" id="effectContent">
+        <!-- エフェクト選択 -->
+        <h4>エフェクト選択</h4>
+        <div class="option-group">
+          <button id="effectNone" class="active">なし</button>
+          <button id="effectPulse">パルス</button>
+          <button id="effectWave">波形</button>
+          <button id="effectSpiral">螺旋</button>
+          <button id="effectFirefly">蛍</button>
+          <button id="effectGlitter">キラキラ</button>
+        </div>
+        
+        <!-- グラデーション設定 -->
+        <h4>グラデーション</h4>
+        <div class="option-group">
+          <button id="gradientNone" class="active">なし</button>
+          <button id="gradientVertical">縦</button>
+          <button id="gradientRadial">放射状</button>
+          <button id="gradientRainbow">虹色</button>
+          <button id="gradientNeon">ネオン</button>
+          <button id="gradientCyclic">循環</button>
+        </div>
+        
+        <!-- エフェクト強度 -->
+        <div class="slider-container">
+          <label for="effectIntensity">
+            エフェクト強度
+            <span id="effectIntensityValue">1</span>
+          </label>
+          <input type="range" id="effectIntensity" min="0.1" max="5" value="1" step="0.1">
+        </div>
+        
+        <!-- エフェクト速度 -->
+        <div class="slider-container">
+          <label for="effectSpeed">
+            エフェクト速度
+            <span id="effectSpeedValue">1</span>
+          </label>
+          <input type="range" id="effectSpeed" min="0.1" max="10" value="1" step="0.1">
+        </div>
+      </div>
+    </div>
+    
+    <!-- 追加コントロール -->
+    <div class="panel-section">
+      <div class="additional-controls">
+        <button id="showText">テキスト表示</button>
+        <button id="hideText">テキスト非表示</button>
+        <button id="resetSettings">設定をリセット</button>
+      </div>
+    </div>
+  </div>
+  
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    
+    // 定数
+    const TAU = Math.PI * 2;
+    
+    /**
+     * App クラス - アプリケーション全体を管理
+     */
+    class ParticleEffectApp {
+      constructor() {
+        // 基本的な設定
+        this.config = {
+          particles: {
+            count: 1000,
+            size: 1,
+            speed: 1,
+            spread: 10,
+            shape: 'circle',
+            color: new THREE.Color(0x87ccff)
+          },
+          sphere: {
+            visible: true,
+            size: 1,
+            speed: 1,
+            style: 'wireframe',
+            color: new THREE.Color(0x3366ff)
+          },
+          background: {
+            color: new THREE.Color(0x0a0a2a)
+          },
+          effects: {
+            type: 'none',
+            gradient: 'none',
+            intensity: 1,
+            speed: 1,
+            secondaryColor: new THREE.Color(0xff3366)
+          },
+          animation: {
+            type: 'none',
+            speed: 1,
+            intensity: 1,
+            progress: 0
+          },
+          interaction: {
+            mouseFollow: false,
+            mouseRepel: false,
+            autoRotate: true,
+            strength: 1
+          }
+        };
+        
+        // マウス座標
+        this.mouse = {
+          x: 0,
+          y: 0,
+          active: false
+        };
+        
+        // Three.js 関連のプロパティ
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.particlesMesh = null;
+        this.sphere = null;
+        this.clock = null;
+        this.animationFrameId = null;
+        this.resizeTimer = null;
+        
+        // キャッシュしたジオメトリとマテリアル
+        this.geometryCache = {};
+        this.materialCache = {};
+        
+        // シェーダー
+        this.setupShaders();
+        
+        // 初期化
+        this.checkWebGLSupport();
+        this.initThreeJS();
+        this.setupControlPanel();
+        this.setupEventListeners();
+        this.animate();
+      }
+      
+      /**
+       * WebGLのサポートを確認
+       */
+      checkWebGLSupport() {
+        try {
+          const isSupported = !!window.WebGLRenderingContext && 
+                             !!document.createElement('canvas').getContext('experimental-webgl');
+          if (!isSupported) {
+            this.showError('お使いのブラウザはWebGLをサポートしていません。最新のブラウザでご覧ください。');
+            throw new Error('WebGL not supported');
+          }
+        } catch(e) {
+          this.showError('WebGLのサポート確認中にエラーが発生しました：' + e.message);
+          throw e;
+        }
+      }
+      
+      /**
+       * エラーメッセージを表示
+       */
+      showError(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.textContent = message;
+        document.body.appendChild(errorDiv);
+      }
+      
+      /**
+       * シェーダーの設定
+       */
+      setupShaders() {
+        // 基本的な頂点シェーダー
+        this.vertexShaders = {
+          // 各形状の頂点シェーダー
+          circle: `
+            attribute float size;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          square: `
+            attribute float size;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          star: `
+            attribute float size;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          heart: `
+            attribute float size;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          cherry: `
+            attribute float size;
+            void main() {
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          bubble: `
+            attribute float size;
+            uniform float time;
+            void main() {
+              vec3 pos = position;
+              // 泡の浮き上がる動き
+              pos.y += sin(pos.x * 2.0 + time) * 0.05 + time * 0.1;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          snowflake: `
+            attribute float size;
+            uniform float time;
+            void main() {
+              vec3 pos = position;
+              // 雪の落ちる動き
+              pos.y -= mod(time * (0.3 + abs(pos.x) * 0.2), 20.0);
+              pos.x += sin(time * 0.5 + pos.y) * 0.1;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // ランダムタイプを追加する頂点シェーダー
+          random: `
+            attribute float size;
+            varying float vType;
+            void main() {
+              vType = position.x + position.y + position.z;
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // パルスエフェクト用頂点シェーダー
+          pulse: `
+            attribute float size;
+            uniform float time;
+            uniform float intensity;
+            void main() {
+              float scale = 1.0 + sin(time * 2.0) * 0.3 * intensity;
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * scale * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // 波形エフェクト用頂点シェーダー
+          wave: `
+            attribute float size;
+            uniform float time;
+            uniform float intensity;
+            void main() {
+              vec3 pos = position;
+              pos.y += sin(pos.x * 0.5 + time * 2.0) * 0.5 * intensity;
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // 螺旋エフェクト用頂点シェーダー
+          spiral: `
+            attribute float size;
+            uniform float time;
+            uniform float intensity;
+            void main() {
+              float dist = length(position.xz);
+              float angle = time * 0.5 * intensity;
+              float s = sin(angle + dist * 0.5);
+              float c = cos(angle + dist * 0.5);
+              vec3 pos = position;
+              pos.x = position.x * c - position.z * s;
+              pos.z = position.x * s + position.z * c;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // 蛍エフェクト用頂点シェーダー
+          firefly: `
+            attribute float size;
+            uniform float time;
+            varying float vTime;
+            void main() {
+              vTime = time + position.x + position.y + position.z;
+              vec3 pos = position;
+              
+              // 蛍のようにランダムに動く
+              pos.x += sin(time * 0.5 + position.y * 3.0) * 0.1;
+              pos.y += cos(time * 0.7 + position.x * 2.0) * 0.1;
+              pos.z += sin(time * 0.3 + position.z * 2.5) * 0.1;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              // サイズもランダムに変化
+              float sizeFluctuation = 0.7 + 0.3 * sin(time * 2.0 + position.x * 10.0);
+              gl_PointSize = size * sizeFluctuation * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // キラキラエフェクト用頂点シェーダー
+          glitter: `
+            attribute float size;
+            uniform float time;
+            varying float vBrightness;
+            void main() {
+              // キラキラするタイミングを粒子ごとに変える
+              float period = 3.0 + sin(position.x * 10.0) * 2.0;
+              vBrightness = 0.5 + 0.5 * sin(time * 3.0 + position.x * 5.0 + position.y * 3.0 + position.z * 2.0);
+              
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // マウス追従用頂点シェーダー
+          mouseFollow: `
+            attribute float size;
+            uniform vec2 mousePos;
+            uniform float mouseStrength;
+            void main() {
+              vec3 pos = position;
+              vec2 mouseDiff = mousePos - vec2(pos.x, pos.y);
+              float dist = length(mouseDiff);
+              
+              // マウスに近い粒子ほど引き寄せられる
+              if (dist < 2.0) {
+                float strength = (1.0 - dist / 2.0) * mouseStrength;
+                pos.x += mouseDiff.x * strength * 0.03;
+                pos.y += mouseDiff.y * strength * 0.03;
+              }
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // マウス反発用頂点シェーダー
+          mouseRepel: `
+            attribute float size;
+            uniform vec2 mousePos;
+            uniform float mouseStrength;
+            void main() {
+              vec3 pos = position;
+              vec2 mouseDiff = mousePos - vec2(pos.x, pos.y);
+              float dist = length(mouseDiff);
+              
+              // マウスに近い粒子ほど反発する
+              if (dist < 2.0) {
+                float strength = (1.0 - dist / 2.0) * mouseStrength;
+                pos.x -= mouseDiff.x * strength * 0.05;
+                pos.y -= mouseDiff.y * strength * 0.05;
+              }
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          // アニメーション用頂点シェーダー
+          explosion: `
+            attribute float size;
+            uniform float progress;
+            uniform float intensity;
+            void main() {
+              vec3 pos = position;
+              float distance = length(pos);
+              
+              // 爆発アニメーション
+              pos *= 1.0 + progress * intensity * 2.0;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              // サイズも変化
+              float scale = 1.0 - progress * 0.5;
+              gl_PointSize = size * scale * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          pulsate: `
+            attribute float size;
+            uniform float progress;
+            uniform float intensity;
+            void main() {
+              vec3 pos = position;
+              
+              // 鼓動アニメーション
+              float scale = 1.0 + sin(progress * 10.0) * 0.2 * intensity;
+              pos *= scale;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+          vortex: `
+            attribute float size;
+            uniform float progress;
+            uniform float intensity;
+            void main() {
+              vec3 pos = position;
+              float dist = length(pos.xz);
+              
+              // 渦巻きアニメーション
+              float angle = progress * 5.0 * intensity;
+              float s = sin(angle + dist);
+              float c = cos(angle + dist);
+              pos.x = pos.x * c - pos.z * s;
+              pos.z = pos.x * s + pos.z * c;
+              
+              vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `
+        };
+        
+        // フラグメントシェーダー
+        this.fragmentShaders = {
+          // 円形の粒子
+          circle: `
+            uniform vec3 color;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              gl_FragColor = vec4(color, 1.0 - (distance * 2.0));
+            }
+          `,
+          // 四角形の粒子
+          square: `
+            uniform vec3 color;
+            void main() {
+              vec2 coords = gl_PointCoord - vec2(0.5);
+              if (abs(coords.x) > 0.4 || abs(coords.y) > 0.4) {
+                discard;
+              }
+              float edge = max(abs(coords.x), abs(coords.y));
+              gl_FragColor = vec4(color, 1.0 - (edge * 2.5));
+            }
+          `,
+          // 星形の粒子
+          star: `
+            uniform vec3 color;
+            void main() {
+              vec2 p = (gl_PointCoord - 0.5) * 2.0;
+              
+              const float points = 5.0;
+              const float outerRadius = 1.0;
+              const float innerRadius = 0.4;
+              
+              float angle = atan(p.y, p.x);
+              if (angle < 0.0) angle += 2.0 * 3.14159;
+              
+              float section = 3.14159 / points;
+              float modAngle = mod(angle, 2.0 * section);
+              
+              float radius;
+              if (modAngle < section) {
+                float t = modAngle / section;
+                radius = mix(outerRadius, innerRadius, t);
+              } else {
+                float t = (modAngle - section) / section;
+                radius = mix(innerRadius, outerRadius, t);
+              }
+              
+              if (length(p) > radius) {
+                discard;
+              }
+              
+              gl_FragColor = vec4(color, 1.0);
+            }
+          `,
+          // ランダム形状の粒子
+          random: `
+            uniform vec3 color;
+            varying float vType;
+            void main() {
+              float type = mod(abs(vType) * 10.0, 3.0);
+              
+              if (type < 1.0) {
+                // 円形
+                float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+                if (distance > 0.5) {
+                  discard;
+                }
+                gl_FragColor = vec4(color, 1.0 - (distance * 2.0));
+              } else if (type < 2.0) {
+                // 四角形
+                vec2 coords = gl_PointCoord - vec2(0.5);
+                if (abs(coords.x) > 0.4 || abs(coords.y) > 0.4) {
+                  discard;
+                }
+                float edge = max(abs(coords.x), abs(coords.y));
+                gl_FragColor = vec4(color, 1.0 - (edge * 2.5));
+              } else {
+                // 三角形
+                vec2 pos = gl_PointCoord * 2.0 - 1.0;
+                float a = atan(pos.y, pos.x) + 3.14159;
+                float r = length(pos);
+                
+                float d = cos(floor(0.5 + a / 2.09439) * 2.09439 - a) * r;
+                
+                if (d > 0.5) {
+                  discard;
+                }
+                
+                float alpha = 1.0 - (d * 2.0);
+                gl_FragColor = vec4(color, alpha);
+              }
+            }
+          `,
+          // ハート形の粒子
+          heart: `
+            uniform vec3 color;
+            void main() {
+              vec2 p = (gl_PointCoord - 0.5) * 2.0;
+              
+              p.y = p.y - 0.3;
+              
+              float upperLeftCircle = length(vec2(p.x + 0.35, p.y + 0.25)) - 0.55;
+              float upperRightCircle = length(vec2(p.x - 0.35, p.y + 0.25)) - 0.55;
+              
+              float upperPart = min(upperLeftCircle, upperRightCircle);
+              
+              float lowerPart = length(p * vec2(0.8, 1.2)) - 0.7;
+              
+              float heartShape = min(upperPart, lowerPart);
+              
+              if (heartShape > 0.0) {
+                discard;
+              }
+              
+              gl_FragColor = vec4(color, 1.0);
+            }
+          `,
+          // 桜形の粒子
+          cherry: `
+            uniform vec3 color;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float dist = length(p);
+              
+              if (dist > 1.0) {
+                discard;
+              }
+              
+              float angle = atan(p.y, p.x) + 3.14159;
+              float numPetals = 5.0;
+              
+              float petal = 0.42 + 0.38 * cos(angle * numPetals);
+              
+              if (dist > petal) {
+                discard;
+              }
+              
+              vec3 petalColor = color;
+              
+              float centerBrightness = smoothstep(0.0, 0.5, 1.0 - dist / petal);
+              petalColor = mix(petalColor, petalColor * 1.2, centerBrightness);
+              
+              float alpha = smoothstep(petal, petal - 0.1, dist);
+              
+              gl_FragColor = vec4(petalColor, alpha);
+            }
+          `,
+          // 泡の粒子
+          bubble: `
+            uniform vec3 color;
+            uniform float time;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float dist = length(p);
+              
+              // 泡のような境界
+              if (dist > 0.9) {
+                discard;
+              }
+              
+              // 半透明エフェクト
+              float alpha = 0.5 - 0.5 * smoothstep(0.7, 0.9, dist);
+              
+              // 泡の光の反射
+              float highlight = 0.5 * smoothstep(0.3, 0.0, length(p - vec2(-0.3, -0.3)));
+              
+              // 時間に応じて色相を変化させる
+              vec3 bubbleColor = color * (0.8 + 0.2 * sin(time + 5.0 * dist));
+              bubbleColor += vec3(highlight);
+              
+              gl_FragColor = vec4(bubbleColor, alpha);
+            }
+          `,
+          // 雪の結晶の粒子
+          snowflake: `
+            uniform vec3 color;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float dist = length(p);
+              
+              if (dist > 1.0) {
+                discard;
+              }
+              
+              // 六角形のベースパターン
+              float angle = atan(p.y, p.x);
+              float snowflake = 0.0;
+              
+              // 主要な六角形のスポーク
+              for (int i = 0; i < 6; i++) {
+                  float a = float(i) * 3.14159 / 3.0;
+                  float d = abs(cos(angle - a) * dist);
+                  snowflake = max(snowflake, 0.5 - 0.5 * smoothstep(0.05, 0.15, d));
+              }
+              
+              // 六角形の飾り
+              for (int i = 0; i < 6; i++) {
+                  float a = (float(i) + 0.5) * 3.14159 / 3.0;
+                  float d = abs(cos(angle - a) * dist);
+                  snowflake = max(snowflake, 0.3 - 0.3 * smoothstep(0.05, 0.15, d));
+              }
+              
+              if (snowflake < 0.05 && dist > 0.2) {
+                discard;
+              }
+              
+              gl_FragColor = vec4(color, snowflake * (1.0 - dist));
+            }
+          `,
+          // 蛍の粒子
+          firefly: `
+            uniform vec3 color;
+            uniform float time;
+            varying float vTime;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float dist = length(p);
+              
+              if (dist > 1.0) {
+                discard;
+              }
+              
+              // 時間によって明るさを変化させる
+              float brightness = 0.7 + 0.3 * sin(vTime * 3.0);
+              
+              // 光のフレア効果
+              float glow = 1.0 - dist;
+              glow = pow(glow, 2.0) * brightness;
+              
+              // 透明度のグラデーション
+              float alpha = glow;
+              
+              // 蛍の光の色
+              vec3 fireflyColor = mix(color, vec3(1.0, 1.0, 0.8), 0.3);
+              
+              gl_FragColor = vec4(fireflyColor * brightness, alpha);
+            }
+          `,
+          // キラキラの粒子
+          glitter: `
+            uniform vec3 color;
+            uniform float time;
+            varying float vBrightness;
+            void main() {
+              vec2 p = gl_PointCoord * 2.0 - 1.0;
+              float dist = length(p);
+              
+              if (dist > 0.7) {
+                discard;
+              }
+              
+              // スターバースト効果
+              float star = 0.0;
+              for (int i = 0; i < 5; i++) {
+                float angle = float(i) * 3.14159 * 2.0 / 5.0;
+                float d = abs(cos(atan(p.y, p.x) - angle) * dist);
+                star = max(star, 0.5 - 0.5 * smoothstep(0.1, 0.2, d));
+              }
+              
+              // 時間に応じて輝きを変化
+              float brightness = vBrightness;
+              float alpha = star * brightness * (1.0 - dist);
+              
+              // 色も少し変化させる
+              vec3 glitterColor = mix(color, vec3(1.0), 0.2 + 0.2 * brightness);
+              
+              gl_FragColor = vec4(glitterColor, alpha);
+            }
+          `,
+          // 縦方向グラデーション
+          verticalGradient: `
+            uniform vec3 color;
+            uniform vec3 secondaryColor;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              
+              vec3 mixedColor = mix(color, secondaryColor, gl_PointCoord.y);
+              gl_FragColor = vec4(mixedColor, 1.0 - (distance * 2.0));
+            }
+          `,
+          // 放射状グラデーション
+          radialGradient: `
+            uniform vec3 color;
+            uniform vec3 secondaryColor;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              
+              vec3 mixedColor = mix(color, secondaryColor, distance * 2.0);
+              gl_FragColor = vec4(mixedColor, 1.0 - (distance * 2.0));
+            }
+          `,
+          // 虹色グラデーション
+          rainbowGradient: `
+            uniform vec3 color;
+            uniform float time;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              
+              float hue = mod(distance * 5.0 + time * 0.5, 1.0);
+              
+              vec3 rgb;
+              float h = hue * 6.0;
+              float i = floor(h);
+              float f = h - i;
+              float p = 0.0;
+              float q = 1.0 - f;
+              float t = f;
+              
+              if (i == 0.0) rgb = vec3(1.0, t, p);
+              else if (i == 1.0) rgb = vec3(q, 1.0, p);
+              else if (i == 2.0) rgb = vec3(p, 1.0, t);
+              else if (i == 3.0) rgb = vec3(p, q, 1.0);
+              else if (i == 4.0) rgb = vec3(t, p, 1.0);
+              else rgb = vec3(1.0, p, q);
+              
+              vec3 finalColor = mix(color, rgb, 0.7);
+              gl_FragColor = vec4(finalColor, 1.0 - (distance * 2.0));
+            }
+          `,
+          // ネオングラデーション
+          neonGradient: `
+            uniform vec3 color;
+            uniform vec3 secondaryColor;
+            uniform float time;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              
+              // ネオン効果
+              float glow = 1.0 - distance * 2.0;
+              glow = pow(glow, 1.5);
+              
+              // 色の脈動
+              float pulse = 0.5 + 0.5 * sin(time * 2.0);
+              vec3 neonColor = mix(color, secondaryColor, pulse);
+              
+              // 内側を明るく
+              neonColor += vec3(0.2, 0.2, 0.2) * (1.0 - distance * 2.0);
+              
+              gl_FragColor = vec4(neonColor, glow);
+            }
+          `,
+          // 循環グラデーション
+          cyclicGradient: `
+            uniform vec3 color;
+            uniform vec3 secondaryColor;
+            uniform float time;
+            void main() {
+              float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+              if (distance > 0.5) {
+                discard;
+              }
+              
+              // 時間と角度に基づく循環グラデーション
+              float angle = atan(gl_PointCoord.y - 0.5, gl_PointCoord.x - 0.5);
+              float gradientPos = 0.5 + 0.5 * sin(angle + time * 3.0);
+              
+              vec3 mixedColor = mix(color, secondaryColor, gradientPos);
+              gl_FragColor = vec4(mixedColor, 1.0 - (distance * 2.0));
+            }
+          `
+        };
+      }
+      
+      /**
+       * シェーダーの選択
+       */
+      selectShaders() {
+        let vertexShader, fragmentShader;
+        
+        // アニメーションシェーダーの優先順位が最も高い
+        if (this.config.animation.type !== 'none') {
+          vertexShader = this.vertexShaders[this.config.animation.type];
+        }
+        // 次にマウスインタラクション
+        else if (this.config.interaction.mouseFollow && this.mouse.active) {
+          vertexShader = this.vertexShaders.mouseFollow;
+        }
+        else if (this.config.interaction.mouseRepel && this.mouse.active) {
+          vertexShader = this.vertexShaders.mouseRepel;
+        }
+        // 次にエフェクト
+        else if (this.config.effects.type !== 'none') {
+          vertexShader = this.vertexShaders[this.config.effects.type];
+        }
+        // 特殊形状のシェーダー
+        else if (this.config.particles.shape === 'bubble' || this.config.particles.shape === 'snowflake') {
+          vertexShader = this.vertexShaders[this.config.particles.shape];
+        }
+        // ランダム形状
+        else if (this.config.particles.shape === 'random') {
+          vertexShader = this.vertexShaders.random;
+        }
+        // 標準形状
+        else {
+          vertexShader = this.vertexShaders[this.config.particles.shape] || this.vertexShaders.circle;
+        }
+        
+        // フラグメントシェーダーの選択
+        if (this.config.effects.gradient !== 'none') {
+          switch(this.config.effects.gradient) {
+            case 'vertical':
+              fragmentShader = this.fragmentShaders.verticalGradient;
+              break;
+            case 'radial':
+              fragmentShader = this.fragmentShaders.radialGradient;
+              break;
+            case 'rainbow':
+              fragmentShader = this.fragmentShaders.rainbowGradient;
+              break;
+            case 'neon':
+              fragmentShader = this.fragmentShaders.neonGradient;
+              break;
+            case 'cyclic':
+              fragmentShader = this.fragmentShaders.cyclicGradient;
+              break;
+            default:
+              fragmentShader = this.fragmentShaders[this.config.particles.shape] || this.fragmentShaders.circle;
+          }
+        } else {
+          fragmentShader = this.fragmentShaders[this.config.particles.shape] || this.fragmentShaders.circle;
+        }
+        
+        return { vertexShader, fragmentShader };
+      }
+      
+      /**
+       * Three.jsの初期化
+       */
+      initThreeJS() {
+        try {
+          // コンテナ取得
+          const container = document.getElementById('threeContainer');
+          
+          // シーンのセットアップ
+          this.scene = new THREE.Scene();
+          this.scene.background = new THREE.Color(this.config.background.color);
+          
+          // 縦長の画面比率を維持するためのカメラ設定（9:16を保証）
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          const aspectRatio = width / height;
+          
+          // カメラのセットアップ
+          this.camera = new THREE.PerspectiveCamera(75, aspectRatio, 0.1, 1000);
+          this.camera.position.z = 5;
+          
+          // レンダラーのセットアップ
+          this.renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            powerPreference: 'high-performance',
+            alpha: true
+          });
+          this.renderer.setSize(width, height);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // パフォーマンス最適化
+          container.appendChild(this.renderer.domElement);
+          
+          // クロックの初期化
+          this.clock = new THREE.Clock();
+          
+          // 背景の粒子を作成
+          this.createParticles();
+          
+          // 中央に球体を配置
+          this.createSphere();
+          
+        } catch (e) {
+          this.showError('Three.jsの初期化に失敗しました：' + e.message);
+          throw e;
+        }
+      }
+      
+      /**
+       * 粒子メッシュの作成
+       * 特殊形状（ハートと星）はThree.jsのメッシュを使用
+       */
+      createParticles() {
+        // 古い粒子メッシュを削除
+        this.cleanupParticles();
+        
+        const particlesCount = this.config.particles.count;
+        
+        // 星とハートの形状の場合は特別な処理
+        if (this.config.particles.shape === 'star' || this.config.particles.shape === 'heart') {
+          return this.createSpecialShapedParticles();
+        }
+        
+        // 通常の粒子システム（Points）を使用
+        const particlesGeometry = new THREE.BufferGeometry();
+        
+        // 粒子の位置配列を作成
+        const posArray = new Float32Array(particlesCount * 3);
+        for (let i = 0; i < particlesCount * 3; i += 3) {
+          const spread = this.config.particles.spread;
+          posArray[i] = (Math.random() - 0.5) * spread;
+          posArray[i + 1] = (Math.random() - 0.5) * spread * 1.8; // 縦に少し広い範囲
+          posArray[i + 2] = (Math.random() - 0.5) * spread;
+        }
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        
+        // 粒子サイズ配列を作成
+        const sizes = new Float32Array(particlesCount);
+        for (let i = 0; i < particlesCount; i++) {
+          let baseSize = (Math.random() * 1.5 + 1.0);
+          if (['cherry', 'bubble', 'snowflake'].includes(this.config.particles.shape)) {
+            baseSize *= 1.5;
+          }
+          sizes[i] = baseSize * this.config.particles.size;
+        }
+        particlesGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        
+        // シェーダーの選択
+        const { vertexShader, fragmentShader } = this.selectShaders();
+        
+        // ユニフォーム設定
+        const uniforms = {
+          color: { value: this.config.particles.color },
+          secondaryColor: { value: this.config.effects.secondaryColor },
+          time: { value: 0 },
+          intensity: { value: this.config.effects.intensity },
+          mousePos: { value: new THREE.Vector2(0, 0) },
+          mouseStrength: { value: this.config.interaction.strength },
+          progress: { value: this.config.animation.progress }
+        };
+        
+        // マテリアルの作成
+        const particlesMaterial = new THREE.ShaderMaterial({
+          uniforms: uniforms,
+          vertexShader: vertexShader,
+          fragmentShader: fragmentShader,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        
+        // 粒子メッシュを作成
+        this.particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+        this.scene.add(this.particlesMesh);
+      }
+      
+      /**
+       * 特殊形状の粒子を作成（ハートと星）
+       */
+      createSpecialShapedParticles() {
+        // グループを作成して複数のメッシュを管理
+        this.particlesMesh = new THREE.Group();
+        const particlesCount = Math.min(this.config.particles.count, 1000); // 性能考慮で上限を設定
+        
+        // メッシュ生成用のジオメトリをキャッシュ
+        let geometry;
+        const cacheKey = this.config.particles.shape + '_' + this.config.particles.size;
+        
+        if (this.geometryCache[cacheKey]) {
+          geometry = this.geometryCache[cacheKey];
+        } else {
+          if (this.config.particles.shape === 'star') {
+            geometry = this.createStarShape(1);
+          } else { // heart
+            geometry = this.createHeartShape(1);
+          }
+          this.geometryCache[cacheKey] = geometry;
+        }
+        
+        // マテリアルを作成
+        const material = new THREE.MeshBasicMaterial({
+          color: this.config.particles.color,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.8
+        });
+        
+        // パーティクル数分のメッシュを作成
+        for (let i = 0; i < particlesCount; i++) {
+          // 位置をランダムに設定
+          const spread = this.config.particles.spread;
+          const x = (Math.random() - 0.5) * spread;
+          const y = (Math.random() - 0.5) * spread * 1.8;
+          const z = (Math.random() - 0.5) * spread;
+          
+          // サイズをランダムに設定
+          const size = (Math.random() * 0.3 + 0.1) * this.config.particles.size;
+          
+          // メッシュを作成
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.set(x, y, z);
+          mesh.scale.set(size, size, size);
+          
+          // グループに追加
+          this.particlesMesh.add(mesh);
+        }
+        
+        // グループをシーンに追加
+        this.scene.add(this.particlesMesh);
+      }
+      
+      /**
+       * ハートの形状を作成
+       */
+      createHeartShape(radius) {
+        const shape = new THREE.Shape();
+        const x = 0, y = 0;
+        
+        // ハートのトップ部分
+        shape.moveTo(x, y + radius * 0.25);
+        
+        // 右側の曲線（上部）
+        shape.bezierCurveTo(
+          x, y + radius * 0.9,
+          x + radius * 0.8, y + radius * 0.9,
+          x + radius * 0.8, y + radius * 0.4
+        );
+        
+        // 右側の曲線（下部）
+        shape.bezierCurveTo(
+          x + radius * 0.8, y - radius * 0.2,
+          x + radius * 0.35, y - radius * 0.6,
+          x, y - radius * 0.75
+        );
+        
+        // 左側の曲線（下部）
+        shape.bezierCurveTo(
+          x - radius * 0.35, y - radius * 0.6,
+          x - radius * 0.8, y - radius * 0.2,
+          x - radius * 0.8, y + radius * 0.4
+        );
+        
+        // 左側の曲線（上部）
+        shape.bezierCurveTo(
+          x - radius * 0.8, y + radius * 0.9,
+          x, y + radius * 0.9,
+          x, y + radius * 0.25
+        );
+        
+        return new THREE.ShapeGeometry(shape);
+      }
+      
+      /**
+       * 星の形状を作成
+       */
+      createStarShape(radius) {
+        const shape = new THREE.Shape();
+        const points = 5;
+        const innerRadius = radius * 0.4;
+        const outerRadius = radius;
+        
+        for (let i = 0; i < points * 2; i++) {
+          const r = (i % 2 === 0) ? outerRadius : innerRadius;
+          const angle = (i / (points * 2)) * TAU + Math.PI/2;
+          const x = Math.cos(angle) * r;
+          const y = Math.sin(angle) * r;
+          
+          if (i === 0) {
+            shape.moveTo(x, y);
+          } else {
+            shape.lineTo(x, y);
+          }
+        }
+        
+        shape.closePath();
+        return new THREE.ShapeGeometry(shape);
+      }
+      
+      /**
+       * 粒子メッシュのクリーンアップ
+       */
+      cleanupParticles() {
+        if (this.particlesMesh) {
+          if (this.particlesMesh.isGroup) {
+            // グループの場合は子要素も全て削除
+            while(this.particlesMesh.children.length > 0) {
+              const mesh = this.particlesMesh.children[0];
+              this.particlesMesh.remove(mesh);
+              // ジオメトリとマテリアルはキャッシュしているので個別には破棄しない
+            }
+          } else {
+            // Points またはその他の単一オブジェクトの場合
+            if (this.particlesMesh.geometry) this.particlesMesh.geometry.dispose();
+            if (this.particlesMesh.material) this.particlesMesh.material.dispose();
+          }
+          this.scene.remove(this.particlesMesh);
+          this.particlesMesh = null;
+        }
+      }
+      
+      /**
+       * 球体の作成
+       */
+      createSphere() {
+        // 既存の球体を削除
+        if (this.sphere) {
+          this.scene.remove(this.sphere);
+          this.sphere = null;
+        }
+        
+        const sphereSize = this.config.sphere.size;
+        let sphereGeometry, sphereMaterial;
+        
+        // 形状に応じたジオメトリとマテリアルを作成
+        switch(this.config.sphere.style) {
+          case 'wireframe':
+            sphereGeometry = new THREE.SphereGeometry(sphereSize, 32, 32);
+            sphereMaterial = new THREE.MeshBasicMaterial({
+              color: this.config.sphere.color,
+              wireframe: true
+            });
+            this.sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            break;
+            
+          case 'solid':
+            sphereGeometry = new THREE.SphereGeometry(sphereSize, 32, 32);
+            sphereMaterial = new THREE.MeshBasicMaterial({
+              color: this.config.sphere.color
+            });
+            this.sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            break;
+            
+          case 'points':
+            sphereGeometry = new THREE.SphereGeometry(sphereSize, 16, 16);
+            sphereMaterial = new THREE.PointsMaterial({
+              color: this.config.sphere.color,
+              size: 0.05
+            });
+            this.sphere = new THREE.Points(sphereGeometry, sphereMaterial);
+            break;
+            
+          case 'glow':
+            // 発光効果付きワイヤーフレーム
+            sphereGeometry = new THREE.SphereGeometry(sphereSize, 32, 32);
+            sphereMaterial = new THREE.MeshBasicMaterial({
+              color: this.config.sphere.color,
+              wireframe: true
+            });
+            this.sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            
+            // 発光層を追加
+            const glowGeometry = new THREE.SphereGeometry(sphereSize * 1.2, 32, 32);
+            const glowMaterial = new THREE.ShaderMaterial({
+              uniforms: {
+                color: { value: new THREE.Color(this.config.sphere.color) }
+              },
+              vertexShader: `
+                varying vec3 vNormal;
+                void main() {
+                  vNormal = normalize(normalMatrix * normal);
+                  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+              `,
+              fragmentShader: `
+                uniform vec3 color;
+                varying vec3 vNormal;
+                void main() {
+                  float intensity = pow(0.7 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                  gl_FragColor = vec4(color, 1.0) * intensity;
+                }
+              `,
+              transparent: true,
+              blending: THREE.AdditiveBlending,
+              side: THREE.BackSide
+            });
+            
+            const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+            this.scene.add(glowMesh);
+            break;
+            
+          case 'rings':
+            // リング状の球体
+            this.sphere = new THREE.Group();
+            
+            // 複数のリングを作成
+            const rings = 8;
+            for (let i = 0; i < rings; i++) {
+              const angle = (i / rings) * Math.PI;
+              const radius = sphereSize * Math.sin(angle);
+              const y = sphereSize * Math.cos(angle);
+              
+              const ringGeometry = new THREE.TorusGeometry(radius, 0.02, 16, 100);
+              const ringMaterial = new THREE.MeshBasicMaterial({
+                color: this.config.sphere.color,
+                transparent: true,
+                opacity: 0.7
+              });
+              
+              const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+              ring.rotation.x = Math.PI / 2;
+              ring.position.y = y;
+              
+              this.sphere.add(ring);
+            }
+            
+            // 直交するリングを追加
+            for (let i = 0; i < rings; i++) {
+              const angle = (i / rings) * Math.PI;
+              const radius = sphereSize * Math.sin(angle);
+              const z = sphereSize * Math.cos(angle);
+              
+              const ringGeometry = new THREE.TorusGeometry(radius, 0.02, 16, 100);
+              const ringMaterial = new THREE.MeshBasicMaterial({
+                color: this.config.sphere.color,
+                transparent: true,
+                opacity: 0.7
+              });
+              
+              const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+              ring.position.z = z;
+              
+              this.sphere.add(ring);
+            }
+            break;
+            
+          case 'galaxy':
+            // 銀河のような渦巻き
+            this.sphere = new THREE.Group();
+            
+            // 粒子数
+            const particleCount = 3000;
+            const galaxyGeometry = new THREE.BufferGeometry();
+            const galaxyPositions = new Float32Array(particleCount * 3);
+            const galaxySizes = new Float32Array(particleCount);
+            const galaxyColors = new Float32Array(particleCount * 3);
+            
+            // 銀河の腕のパラメータ
+            const arms = 3;
+            const armWidth = 0.2;
+            
+            for (let i = 0; i < particleCount; i++) {
+              const i3 = i * 3;
+              
+              // 銀河の中心からの距離
+              const distance = Math.random() * sphereSize;
+              
+              // 銀河の腕に沿った角度
+              const armAngle = (Math.random() * 2 * Math.PI) / arms;
+              const arm = Math.floor(Math.random() * arms);
+              const angle = arm * (2 * Math.PI / arms) + armAngle;
+              
+              // 腕の形状に合わせて位置を調整
+              const spiralOffset = Math.random() * armWidth - armWidth/2;
+              const spiralAngle = angle + distance * 0.5; // 渦巻き係数
+              
+              // 最終位置
+              galaxyPositions[i3] = Math.cos(spiralAngle) * distance + Math.random() * spiralOffset;
+              galaxyPositions[i3 + 1] = (Math.random() - 0.5) * 0.5; // 薄い円盤に
+              galaxyPositions[i3 + 2] = Math.sin(spiralAngle) * distance + Math.random() * spiralOffset;
+              
+              // サイズ
+              galaxySizes[i] = Math.random() * 0.05 + 0.02;
+              
+              // 色（中心に向かって色が変化）
+              const colorFactor = distance / sphereSize;
+              const color = new THREE.Color();
+              color.setHSL(0.6, 0.8, 0.4 + 0.6 * (1 - colorFactor));
+              
+              galaxyColors[i3] = color.r;
+              galaxyColors[i3 + 1] = color.g;
+              galaxyColors[i3 + 2] = color.b;
+            }
+            
+            galaxyGeometry.setAttribute('position', new THREE.BufferAttribute(galaxyPositions, 3));
+            galaxyGeometry.setAttribute('size', new THREE.BufferAttribute(galaxySizes, 1));
+            galaxyGeometry.setAttribute('color', new THREE.BufferAttribute(galaxyColors, 3));
+            
+            const galaxyMaterial = new THREE.PointsMaterial({
+              size: 0.1,
+              transparent: true,
+              opacity: 0.8,
+              vertexColors: true,
+              blending: THREE.AdditiveBlending,
+              sizeAttenuation: true
+            });
+            
+            const galaxy = new THREE.Points(galaxyGeometry, galaxyMaterial);
+            this.sphere.add(galaxy);
+            break;
+        }
+        
+        if (this.sphere) {
+          this.sphere.visible = this.config.sphere.visible;
+          this.scene.add(this.sphere);
+        }
+      }
+      
+      /**
+       * 粒子の色を更新
+       */
+      updateParticleColors() {
+        if (this.particlesMesh) {
+          if (this.particlesMesh.isGroup) {
+            // グループ内の各メッシュの色を更新
+            this.particlesMesh.children.forEach(mesh => {
+              if (mesh.material) {
+                mesh.material.color.copy(this.config.particles.color);
+              }
+            });
+          } else if (this.particlesMesh.material) {
+            // Pointsの場合はuniformsを更新
+            if (this.particlesMesh.material.uniforms) {
+              if (this.particlesMesh.material.uniforms.color) {
+                this.particlesMesh.material.uniforms.color.value.copy(this.config.particles.color);
+              }
+              if (this.particlesMesh.material.uniforms.secondaryColor) {
+                this.particlesMesh.material.uniforms.secondaryColor.value.copy(this.config.effects.secondaryColor);
+              }
+            }
+          }
+        }
+      }
+      
+      /**
+       * アニメーションループ
+       */
+      animate() {
+        this.animationFrameId = requestAnimationFrame(this.animate.bind(this));
+        
+        try {
+          const deltaTime = Math.min(0.05, this.clock.getDelta()); // デルタタイムを制限
+          const elapsedTime = this.clock.getElapsedTime();
+          
+          // アニメーションの進行（ループ）
+          if (this.config.animation.type !== 'none') {
+            this.config.animation.progress += deltaTime * this.config.animation.speed;
+            if (this.config.animation.progress > 1) {
+              this.config.animation.progress = 0;
+            }
+            
+            // ユニフォームの更新
+            if (this.particlesMesh && !this.particlesMesh.isGroup && 
+                this.particlesMesh.material && this.particlesMesh.material.uniforms) {
+              if (this.particlesMesh.material.uniforms.progress) {
+                this.particlesMesh.material.uniforms.progress.value = this.config.animation.progress;
+              }
+              if (this.particlesMesh.material.uniforms.intensity) {
+                this.particlesMesh.material.uniforms.intensity.value = this.config.animation.intensity;
+              }
+            }
+          }
+          
+          // マウス座標をシェーダーユニフォームに渡す
+          if ((this.config.interaction.mouseFollow || this.config.interaction.mouseRepel) && 
+              this.mouse.active && this.particlesMesh && 
+              !this.particlesMesh.isGroup && this.particlesMesh.material && 
+              this.particlesMesh.material.uniforms) {
+            
+            // Three.jsの座標系に合わせて-1〜1の範囲に正規化
+            const mousePos = new THREE.Vector2(
+              this.mouse.x * this.config.particles.spread / window.innerWidth * 2,
+              -this.mouse.y * this.config.particles.spread / window.innerHeight * 2
+            );
+            
+            if (this.particlesMesh.material.uniforms.mousePos) {
+              this.particlesMesh.material.uniforms.mousePos.value = mousePos;
+            }
+            if (this.particlesMesh.material.uniforms.mouseStrength) {
+              this.particlesMesh.material.uniforms.mouseStrength.value = this.config.interaction.strength;
+            }
+          }
+          
+          // 粒子を動かす
+          if (this.particlesMesh) {
+            if (this.particlesMesh.isGroup) {
+              // 自動回転が有効の場合のみ回転
+              if (this.config.interaction.autoRotate) {
+                // グループ全体を回転
+                this.particlesMesh.rotation.y += deltaTime * 0.05 * this.config.particles.speed;
+                this.particlesMesh.rotation.x += deltaTime * 0.03 * this.config.particles.speed;
+                
+                // 個々のメッシュもランダムに回転（重いので制限）
+                for (let i = 0; i < Math.min(10, this.particlesMesh.children.length); i++) {
+                  const index = Math.floor(Math.random() * this.particlesMesh.children.length);
+                  const mesh = this.particlesMesh.children[index];
+                  mesh.rotation.z += deltaTime * 0.1 * this.config.particles.speed;
+                }
+              }
+            } else {
+              // 自動回転が有効の場合のみ回転
+              if (this.config.interaction.autoRotate) {
+                this.particlesMesh.rotation.y += deltaTime * 0.05 * this.config.particles.speed;
+                this.particlesMesh.rotation.x += deltaTime * 0.03 * this.config.particles.speed;
+              }
+              
+              // エフェクトの時間更新
+              if (this.particlesMesh.material && 
+                  this.particlesMesh.material.uniforms && 
+                  this.particlesMesh.material.uniforms.time) {
+                this.particlesMesh.material.uniforms.time.value = elapsedTime * this.config.effects.speed;
+              }
+            }
+          }
+          
+          // 球体を回転させる
+          if (this.sphere && this.config.sphere.visible) {
+            this.sphere.rotation.y += deltaTime * 0.2 * this.config.sphere.speed;
+            this.sphere.rotation.x += deltaTime * 0.1 * this.config.sphere.speed;
+          }
+          
+          // レンダリング
+          if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+          }
+        } catch (e) {
+          console.error('アニメーションエラー:', e);
+          cancelAnimationFrame(this.animationFrameId);
+          this.showError('アニメーションの実行中にエラーが発生しました。ページを再読み込みしてください。');
+        }
+      }
+      
+      /**
+       * おすすめプリセットの適用
+       */
+      applyScenePreset(preset) {
+        // 設定を初期化
+        this.resetSettings();
+        
+        // プリセットに応じて設定
+        switch(preset) {
+          case 'neonCity':
+            // ネオンシティ
+            this.config.particles.count = 2000;
+            this.config.particles.size = 2;
+            this.config.particles.speed = 0.5;
+            this.config.particles.spread = 15;
+            this.config.particles.shape = 'square';
+            this.config.particles.color = new THREE.Color(0x00ffff);
+            
+            this.config.background.color = new THREE.Color(0x070714);
+            
+            this.config.sphere.visible = true;
+            this.config.sphere.size = 1.2;
+            this.config.sphere.speed = 0.3;
+            this.config.sphere.style = 'wireframe';
+            this.config.sphere.color = new THREE.Color(0xff00ff);
+            
+            this.config.effects.type = 'none';
+            this.config.effects.gradient = 'neon';
+            this.config.effects.intensity = 1.5;
+            this.config.effects.speed = 1.5;
+            this.config.effects.secondaryColor = new THREE.Color(0xff00ff);
+            
+            this.config.animation.type = 'pulsate';
+            this.config.animation.speed = 0.8;
+            this.config.animation.intensity = 1.2;
+            
+            // オーバーレイテキスト
+            this.showOverlayText("NEON CITY");
+            break;
+            
+          case 'starfield':
+            // 宇宙の星
+            this.config.particles.count = 5000;
+            this.config.particles.size = 1.5;
+            this.config.particles.speed = 0.2;
+            this.config.particles.spread = 30;
+            this.config.particles.shape = 'star';
+            this.config.particles.color = new THREE.Color(0xffffff);
+            
+            this.config.background.color = new THREE.Color(0x000005);
+            
+            this.config.sphere.visible = true;
+            this.config.sphere.size = 1.8;
+            this.config.sphere.speed = 0.1;
+            this.config.sphere.style = 'galaxy';
+            this.config.sphere.color = new THREE.Color(0x4169e1);
+            
+            this.config.effects.type = 'firefly';
+            this.config.effects.gradient = 'none';
+            this.config.effects.intensity = 2;
+            this.config.effects.speed = 0.5;
+            
+            this.config.interaction.autoRotate = true;
+            
+            // オーバーレイテキスト
+            this.showOverlayText("COSMIC VOYAGE");
+            break;
+            
+          case 'cherryBlossom':
+            // 春の桜
+            this.config.particles.count = 1500;
+            this.config.particles.size = 3;
+            this.config.particles.speed = 1;
+            this.config.particles.spread = 20;
+            this.config.particles.shape = 'cherry';
+            this.config.particles.color = new THREE.Color(0xffb7c5);
+            
+            this.config.background.color = new THREE.Color(0x6a7b95);
+            
+            this.config.sphere.visible = false;
+            
+            this.config.effects.type = 'wave';
+            this.config.effects.gradient = 'vertical';
+            this.config.effects.intensity = 1;
+            this.config.effects.speed = 0.7;
+            this.config.effects.secondaryColor = new THREE.Color(0xffffff);
+            
+            this.config.animation.type = 'none';
+            
+            // オーバーレイテキスト
+            this.showOverlayText("春風 - Spring Breeze");
+            break;
+            
+          case 'fireworks':
+            // 花火大会
+            this.config.particles.count = 3000;
+            this.config.particles.size = 2;
+            this.config.particles.speed = 2;
+            this.config.particles.spread = 20;
+            this.config.particles.shape = 'circle';
+            this.config.particles.color = new THREE.Color(0xff5555);
+            
+            this.config.background.color = new THREE.Color(0x000010);
+            
+            this.config.sphere.visible = false;
+            
+            this.config.effects.type = 'glitter';
+            this.config.effects.gradient = 'rainbow';
+            this.config.effects.intensity = 2;
+            this.config.effects.speed = 3;
+            
+            this.config.animation.type = 'explosion';
+            this.config.animation.speed = 0.4;
+            this.config.animation.intensity = 2;
+            
+            // オーバーレイテキスト
+            this.showOverlayText("SUMMER FIREWORKS");
+            break;
+            
+          case 'underwater':
+            // 水中の泡
+            this.config.particles.count = 800;
+            this.config.particles.size = 3;
+            this.config.particles.speed = 0.5;
+            this.config.particles.spread = 15;
+            this.config.particles.shape = 'bubble';
+            this.config.particles.color = new THREE.Color(0x88ccff);
+            
+            this.config.background.color = new THREE.Color(0x003366);
+            
+            this.config.sphere.visible = true;
+            this.config.sphere.size = 2;
+            this.config.sphere.speed = 0.3;
+            this.config.sphere.style = 'glow';
+            this.config.sphere.color = new THREE.Color(0x00aaff);
+            
+            this.config.effects.type = 'wave';
+            this.config.effects.gradient = 'radial';
+            this.config.effects.intensity = 1;
+            this.config.effects.speed = 0.8;
+            this.config.effects.secondaryColor = new THREE.Color(0x00ffaa);
+            
+            this.config.animation.type = 'none';
+            
+            // オーバーレイテキスト
+            this.showOverlayText("DEEP BLUE");
+            break;
+            
+          case 'dreamy':
+            // 夢幻
+            this.config.particles.count = 4000;
+            this.config.particles.size = 2;
+            this.config.particles.speed = 0.3;
+            this.config.particles.spread = 25;
+            this.config.particles.shape = 'heart';
+            this.config.particles.color = new THREE.Color(0xddaaff);
+            
+            this.config.background.color = new THREE.Color(0x221133);
+            
+            this.config.sphere.visible = true;
+            this.config.sphere.size = 1.5;
+            this.config.sphere.speed = 0.2;
+            this.config.sphere.style = 'rings';
+            this.config.sphere.color = new THREE.Color(0xaa55ff);
+            
+            this.config.effects.type = 'spiral';
+            this.config.effects.gradient = 'cyclic';
+            this.config.effects.intensity = 1.2;
+            this.config.effects.speed = 0.5;
+            this.config.effects.secondaryColor = new THREE.Color(0xff88cc);
+            
+            this.config.animation.type = 'pulsate';
+            this.config.animation.speed = 0.3;
+            this.config.animation.intensity = 0.8;
+            
+            // オーバーレイテキスト
+            this.showOverlayText("DREAMSCAPE");
+            break;
+        }
+        
+        // UI更新
+        this.updateUIControls();
+        
+        // シーン更新
+        this.scene.background = this.config.background.color;
+        this.updateParticleColors();
+        this.createSphere();
+        this.createParticles();
+      }
+      
+      /**
+       * オーバーレイテキストを表示
+       */
+      showOverlayText(text) {
+        const overlayText = document.getElementById('overlayText');
+        overlayText.textContent = text;
+        overlayText.style.opacity = 1;
+        
+        // 5秒後にフェードアウト
+        setTimeout(() => {
+          overlayText.style.opacity = 0;
+        }, 5000);
+      }
+      
+      /**
+       * UIコントロールを設定値で更新
+       */
+      updateUIControls() {
+        // スライダー値の更新
+        document.getElementById('particleCountValue').textContent = this.config.particles.count;
+        document.getElementById('particleCount').value = this.config.particles.count;
+        
+        document.getElementById('particleSizeValue').textContent = this.config.particles.size;
+        document.getElementById('particleSize').value = this.config.particles.size;
+        
+        document.getElementById('particleSpeedValue').textContent = this.config.particles.speed;
+        document.getElementById('particleSpeed').value = this.config.particles.speed;
+        
+        document.getElementById('particleSpreadValue').textContent = this.config.particles.spread;
+        document.getElementById('particleSpread').value = this.config.particles.spread;
+        
+        document.getElementById('sphereSizeValue').textContent = this.config.sphere.size;
+        document.getElementById('sphereSize').value = this.config.sphere.size;
+        
+        document.getElementById('sphereSpeedValue').textContent = this.config.sphere.speed;
+        document.getElementById('sphereSpeed').value = this.config.sphere.speed;
+        
+        document.getElementById('effectIntensityValue').textContent = this.config.effects.intensity;
+        document.getElementById('effectIntensity').value = this.config.effects.intensity;
+        
+        document.getElementById('effectSpeedValue').textContent = this.config.effects.speed;
+        document.getElementById('effectSpeed').value = this.config.effects.speed;
+        
+        document.getElementById('animationSpeedValue').textContent = this.config.animation.speed;
+        document.getElementById('animationSpeed').value = this.config.animation.speed;
+        
+        document.getElementById('animationIntensityValue').textContent = this.config.animation.intensity;
+        document.getElementById('animationIntensity').value = this.config.animation.intensity;
+        
+        document.getElementById('interactionStrengthValue').textContent = this.config.interaction.strength;
+        document.getElementById('interactionStrength').value = this.config.interaction.strength;
+        
+        // カラーピッカーの更新
+        document.getElementById('particleColor').value = '#' + this.config.particles.color.getHexString();
+        document.getElementById('bgColor').value = '#' + this.config.background.color.getHexString();
+        document.getElementById('sphereColor').value = '#' + this.config.sphere.color.getHexString();
+        document.getElementById('secondaryColor').value = '#' + this.config.effects.secondaryColor.getHexString();
+        
+        // 形状ボタンの更新
+        this.updateActiveButtons('shape', this.config.particles.shape);
+        
+        // 球体スタイルボタンの更新
+        this.updateActiveButtons('sphereStyle', this.config.sphere.style);
+        
+        // エフェクトボタンの更新
+        this.updateActiveButtons('effect', this.config.effects.type);
+        
+        // グラデーションボタンの更新
+        this.updateActiveButtons('gradient', this.config.effects.gradient);
+        
+        // アニメーションボタンの更新
+        this.updateActiveButtons('animation', this.config.animation.type);
+        
+        // トグルボタンの更新
+        document.getElementById('toggleMouseFollow').textContent = 
+          `マウス追従: ${this.config.interaction.mouseFollow ? 'ON' : 'OFF'}`;
+        
+        document.getElementById('toggleMouseRepel').textContent = 
+          `マウス反発: ${this.config.interaction.mouseRepel ? 'ON' : 'OFF'}`;
+        
+        document.getElementById('toggleAutoRotate').textContent = 
+          `自動回転: ${this.config.interaction.autoRotate ? 'ON' : 'OFF'}`;
+      }
+      
+      /**
+       * カラープリセットの適用
+       */
+      applyColorPreset(preset) {
+        switch(preset) {
+          case 'blue':
+            this.config.particles.color.set(0x87ccff);
+            this.config.background.color.set(0x0a0a2a);
+            this.config.sphere.color.set(0x3366ff);
+            this.config.effects.secondaryColor.set(0xff3366);
+            break;
+          case 'purple':
+            this.config.particles.color.set(0xd787ff);
+            this.config.background.color.set(0x1a0a2a);
+            this.config.sphere.color.set(0xa336ff);
+            this.config.effects.secondaryColor.set(0x33ffcb);
+            break;
+          case 'orange':
+            this.config.particles.color.set(0xffcc87);
+            this.config.background.color.set(0x2a1a0a);
+            this.config.sphere.color.set(0xff9933);
+            this.config.effects.secondaryColor.set(0x33a3ff);
+            break;
+          case 'green':
+            this.config.particles.color.set(0x87ffaa);
+            this.config.background.color.set(0x0a2a0a);
+            this.config.sphere.color.set(0x33ff66);
+            this.config.effects.secondaryColor.set(0xff3393);
+            break;
+          case 'neon':
+            this.config.particles.color.set(0x00ffff);
+            this.config.background.color.set(0x000033);
+            this.config.sphere.color.set(0xff00ff);
+            this.config.effects.secondaryColor.set(0xffff00);
+            break;
+          case 'pastel':
+            this.config.particles.color.set(0xffb7c5);
+            this.config.background.color.set(0xe0f0ff);
+            this.config.sphere.color.set(0xb0e0e6);
+            this.config.effects.secondaryColor.set(0xb19cd9);
+            break;
+        }
+        
+        // UI更新
+        document.getElementById('particleColor').value = '#' + this.config.particles.color.getHexString();
+        document.getElementById('bgColor').value = '#' + this.config.background.color.getHexString();
+        document.getElementById('sphereColor').value = '#' + this.config.sphere.color.getHexString();
+        document.getElementById('secondaryColor').value = '#' + this.config.effects.secondaryColor.getHexString();
+        
+        // シーン更新
+        this.scene.background = this.config.background.color;
+        this.updateParticleColors();
+        this.createSphere();
+      }
+      
+      /**
+       * 設定をリセット
+       */
+      resetSettings() {
+        this.config = {
+          particles: {
+            count: 1000,
+            size: 1,
+            speed: 1,
+            spread: 10,
+            shape: 'circle',
+            color: new THREE.Color(0x87ccff)
+          },
+          sphere: {
+            visible: true,
+            size: 1,
+            speed: 1,
+            style: 'wireframe',
+            color: new THREE.Color(0x3366ff)
+          },
+          background: {
+            color: new THREE.Color(0x0a0a2a)
+          },
+          effects: {
+            type: 'none',
+            gradient: 'none',
+            intensity: 1,
+            speed: 1,
+            secondaryColor: new THREE.Color(0xff3366)
+          },
+          animation: {
+            type: 'none',
+            speed: 1,
+            intensity: 1,
+            progress: 0
+          },
+          interaction: {
+            mouseFollow: false,
+            mouseRepel: false,
+            autoRotate: true,
+            strength: 1
+          }
+        };
+        
+        // UI更新
+        this.updateUIControls();
+        
+        // シーン更新
+        this.scene.background = this.config.background.color;
+        this.updateParticleColors();
+        this.createSphere();
+        this.createParticles();
+        
+        // テキスト非表示
+        document.getElementById('overlayText').style.opacity = 0;
+      }
+      
+      /**
+       * コントロールパネルのセットアップ
+       */
+      setupControlPanel() {
+        // セクションのトグル機能
+        this.setupToggleSections();
+        
+        // スライダーの初期値設定
+        this.updateUIControls();
+        
+        // コントロールパネルの表示/非表示
+        document.getElementById('togglePanel').addEventListener('click', () => {
+          const controlPanel = document.getElementById('controlPanel');
+          controlPanel.style.display = controlPanel.style.display === 'none' ? 'block' : 'none';
+        });
+        
+        // カラーピッカーのイベント設定
+        document.getElementById('particleColor').addEventListener('input', (e) => {
+          this.config.particles.color.set(e.target.value);
+          this.updateParticleColors();
+        });
+        
+        document.getElementById('bgColor').addEventListener('input', (e) => {
+          this.config.background.color.set(e.target.value);
+          this.scene.background = this.config.background.color;
+        });
+        
+        document.getElementById('sphereColor').addEventListener('input', (e) => {
+          this.config.sphere.color.set(e.target.value);
+          this.createSphere();
+        });
+        
+        document.getElementById('secondaryColor').addEventListener('input', (e) => {
+          this.config.effects.secondaryColor.set(e.target.value);
+          this.updateParticleColors();
+        });
+        
+        // おすすめプリセット設定
+        document.getElementById('scenePreset1').addEventListener('click', () => this.applyScenePreset('neonCity'));
+        document.getElementById('scenePreset2').addEventListener('click', () => this.applyScenePreset('starfield'));
+        document.getElementById('scenePreset3').addEventListener('click', () => this.applyScenePreset('cherryBlossom'));
+        document.getElementById('scenePreset4').addEventListener('click', () => this.applyScenePreset('fireworks'));
+        document.getElementById('scenePreset5').addEventListener('click', () => this.applyScenePreset('underwater'));
+        document.getElementById('scenePreset6').addEventListener('click', () => this.applyScenePreset('dreamy'));
+        
+        // カラープリセット設定
+        document.getElementById('preset1').addEventListener('click', () => this.applyColorPreset('blue'));
+        document.getElementById('preset2').addEventListener('click', () => this.applyColorPreset('purple'));
+        document.getElementById('preset3').addEventListener('click', () => this.applyColorPreset('orange'));
+        document.getElementById('preset4').addEventListener('click', () => this.applyColorPreset('green'));
+        document.getElementById('preset5').addEventListener('click', () => this.applyColorPreset('neon'));
+        document.getElementById('preset6').addEventListener('click', () => this.applyColorPreset('pastel'));
+        
+        // インタラクション設定
+        document.getElementById('toggleMouseFollow').addEventListener('click', () => {
+          this.config.interaction.mouseFollow = !this.config.interaction.mouseFollow;
+          // 両方同時にONにしない
+          if (this.config.interaction.mouseFollow) {
+            this.config.interaction.mouseRepel = false;
+          }
+          this.updateUIControls();
+          // マウスが有効な場合はパーティクルを再作成
+          if (this.config.interaction.mouseFollow) {
+            this.createParticles();
+          }
+        });
+        
+        document.getElementById('toggleMouseRepel').addEventListener('click', () => {
+          this.config.interaction.mouseRepel = !this.config.interaction.mouseRepel;
+          // 両方同時にONにしない
+          if (this.config.interaction.mouseRepel) {
+            this.config.interaction.mouseFollow = false;
+          }
+          this.updateUIControls();
+          // マウスが有効な場合はパーティクルを再作成
+          if (this.config.interaction.mouseRepel) {
+            this.createParticles();
+          }
+        });
+        
+        document.getElementById('toggleAutoRotate').addEventListener('click', () => {
+          this.config.interaction.autoRotate = !this.config.interaction.autoRotate;
+          this.updateUIControls();
+        });
+        
+        document.getElementById('interactionStrength').addEventListener('input', (e) => {
+          this.config.interaction.strength = parseFloat(e.target.value);
+          document.getElementById('interactionStrengthValue').textContent = e.target.value;
+          
+          // マウスユニフォームを更新
+          if (this.particlesMesh && !this.particlesMesh.isGroup && 
+              this.particlesMesh.material && this.particlesMesh.material.uniforms && 
+              this.particlesMesh.material.uniforms.mouseStrength) {
+            this.particlesMesh.material.uniforms.mouseStrength.value = this.config.interaction.strength;
+          }
+        });
+        
+        // アニメーション設定
+        document.getElementById('animationNone').addEventListener('click', () => {
+          this.config.animation.type = 'none';
+          this.updateActiveButtons('animation', 'none');
+          this.createParticles();
+        });
+        
+        document.getElementById('animationExplosion').addEventListener('click', () => {
+          this.config.animation.type = 'explosion';
+          this.updateActiveButtons('animation', 'explosion');
+          this.createParticles();
+        });
+        
+        document.getElementById('animationPulsate').addEventListener('click', () => {
+          this.config.animation.type = 'pulsate';
+          this.updateActiveButtons('animation', 'pulsate');
+          this.createParticles();
+        });
+        
+        document.getElementById('animationVortex').addEventListener('click', () => {
+          this.config.animation.type = 'vortex';
+          this.updateActiveButtons('animation', 'vortex');
+          this.createParticles();
+        });
+        
+        document.getElementById('animationSpeed').addEventListener('input', (e) => {
+          this.config.animation.speed = parseFloat(e.target.value);
+          document.getElementById('animationSpeedValue').textContent = e.target.value;
+        });
+        
+        document.getElementById('animationIntensity').addEventListener('input', (e) => {
+          this.config.animation.intensity = parseFloat(e.target.value);
+          document.getElementById('animationIntensityValue').textContent = e.target.value;
+        });
+        
+        // 粒子数設定
+        document.getElementById('particleCount').addEventListener('input', (e) => {
+          this.config.particles.count = parseInt(e.target.value);
+          document.getElementById('particleCountValue').textContent = e.target.value;
+          this.createParticles();
+        });
+        
+        // 粒子サイズ設定
+        document.getElementById('particleSize').addEventListener('input', (e) => {
+          this.config.particles.size = parseFloat(e.target.value);
+          document.getElementById('particleSizeValue').textContent = e.target.value;
+          
+          // サイズ変更を適用（特殊形状の場合は再作成、通常の場合はサイズ属性を更新）
+          if (this.config.particles.shape === 'heart' || this.config.particles.shape === 'star') {
+            this.createParticles();
+          } else if (this.particlesMesh && this.particlesMesh.geometry) {
+            const sizes = this.particlesMesh.geometry.attributes.size;
+            for (let i = 0; i < sizes.count; i++) {
+              let baseSize = sizes.getX(i) / (this.config.particles.size / parseFloat(e.target.value));
+              sizes.setX(i, baseSize * this.config.particles.size);
+            }
+            sizes.needsUpdate = true;
+          }
+        });
+        
+        // 粒子回転速度設定
+        document.getElementById('particleSpeed').addEventListener('input', (e) => {
+          this.config.particles.speed = parseFloat(e.target.value);
+          document.getElementById('particleSpeedValue').textContent = e.target.value;
+        });
+        
+        // 粒子分布範囲設定
+        document.getElementById('particleSpread').addEventListener('input', (e) => {
+          this.config.particles.spread = parseFloat(e.target.value);
+          document.getElementById('particleSpreadValue').textContent = e.target.value;
+          this.createParticles();
+        });
+        
+        // 粒子形状設定
+        this.setupShapeButtons();
+        
+        // 球体表示切替
+        document.getElementById('toggleSphere').addEventListener('click', () => {
+          this.config.sphere.visible = !this.config.sphere.visible;
+          if (this.sphere) {
+            this.sphere.visible = this.config.sphere.visible;
+          }
+        });
+        
+        // 球体サイズ設定
+        document.getElementById('sphereSize').addEventListener('input', (e) => {
+          this.config.sphere.size = parseFloat(e.target.value);
+          document.getElementById('sphereSizeValue').textContent = e.target.value;
+          this.createSphere();
+        });
+        
+        // 球体回転速度設定
+        document.getElementById('sphereSpeed').addEventListener('input', (e) => {
+          this.config.sphere.speed = parseFloat(e.target.value);
+          document.getElementById('sphereSpeedValue').textContent = e.target.value;
+        });
+        
+        // 球体スタイル設定
+        this.setupSphereStyleButtons();
+        
+        // エフェクト設定
+        this.setupEffectButtons();
+        
+        // グラデーション設定
+        this.setupGradientButtons();
+        
+        // エフェクト強度設定
+        document.getElementById('effectIntensity').addEventListener('input', (e) => {
+          this.config.effects.intensity = parseFloat(e.target.value);
+          document.getElementById('effectIntensityValue').textContent = e.target.value;
+          if (this.particlesMesh && !this.particlesMesh.isGroup && 
+              this.particlesMesh.material && this.particlesMesh.material.uniforms && 
+              this.particlesMesh.material.uniforms.intensity) {
+            this.particlesMesh.material.uniforms.intensity.value = this.config.effects.intensity;
+          }
+        });
+        
+        // エフェクト速度設定
+        document.getElementById('effectSpeed').addEventListener('input', (e) => {
+          this.config.effects.speed = parseFloat(e.target.value);
+          document.getElementById('effectSpeedValue').textContent = e.target.value;
+        });
+        
+        // テキスト表示/非表示
+        document.getElementById('showText').addEventListener('click', () => {
+          const text = prompt('表示するテキストを入力してください', 'HELLO WORLD');
+          if (text) {
+            this.showOverlayText(text);
+          }
+        });
+        
+        document.getElementById('hideText').addEventListener('click', () => {
+          document.getElementById('overlayText').style.opacity = 0;
+        });
+        
+        // 設定リセット
+        document.getElementById('resetSettings').addEventListener('click', () => {
+          this.resetSettings();
+        });
+      }
+      
+      /**
+       * 形状ボタンのセットアップ
+       */
+      setupShapeButtons() {
+        const shapes = ['Circle', 'Square', 'Star', 'Random', 'Heart', 'Cherry', 'Bubble', 'Snowflake'];
+        shapes.forEach(shape => {
+          const shapeLower = shape.toLowerCase();
+          const buttonElement = document.getElementById('shape' + shape);
+          if (buttonElement) {
+            buttonElement.addEventListener('click', () => {
+              this.config.particles.shape = shapeLower;
+              this.updateActiveButtons('shape', shapeLower);
+              this.createParticles();
+            });
+          }
+        });
+      }
+      
+      /**
+       * 球体スタイルボタンのセットアップ
+       */
+      setupSphereStyleButtons() {
+        const styles = ['Wireframe', 'Solid', 'Points', 'Glow', 'Rings', 'Galaxy'];
+        styles.forEach(style => {
+          const styleLower = style.toLowerCase();
+          const buttonElement = document.getElementById('style' + style);
+          if (buttonElement) {
+            buttonElement.addEventListener('click', () => {
+              this.config.sphere.style = styleLower;
+              this.updateActiveButtons('sphereStyle', styleLower);
+              this.createSphere();
+            });
+          }
+        });
+      }
+      
+      /**
+       * エフェクトボタンのセットアップ
+       */
+      setupEffectButtons() {
+        const effects = ['None', 'Pulse', 'Wave', 'Spiral', 'Firefly', 'Glitter'];
+        effects.forEach(effect => {
+          const effectLower = effect.toLowerCase();
+          const buttonElement = document.getElementById('effect' + effect);
+          if (buttonElement) {
+            buttonElement.addEventListener('click', () => {
+              this.config.effects.type = effectLower;
+              this.updateActiveButtons('effect', effectLower);
+              this.createParticles();
+            });
+          }
+        });
+      }
+      
+      /**
+       * グラデーションボタンのセットアップ
+       */
+      setupGradientButtons() {
+        const gradients = ['None', 'Vertical', 'Radial', 'Rainbow', 'Neon', 'Cyclic'];
+        gradients.forEach(gradient => {
+          const gradientLower = gradient.toLowerCase();
+          const buttonElement = document.getElementById('gradient' + gradient);
+          if (buttonElement) {
+            buttonElement.addEventListener('click', () => {
+              this.config.effects.gradient = gradientLower;
+              this.updateActiveButtons('gradient', gradientLower);
+              this.createParticles();
+            });
+          }
+        });
+      }
+      
+      /**
+       * ボタンのアクティブ状態を更新
+       */
+      updateActiveButtons(category, activeId) {
+        let selectors;
+        let categoryPrefix;
+        
+        switch(category) {
+          case 'shape':
+            selectors = '#shapeCircle, #shapeSquare, #shapeStar, #shapeRandom, #shapeHeart, #shapeCherry, #shapeBubble, #shapeSnowflake';
+            categoryPrefix = 'shape';
+            break;
+          case 'sphereStyle':
+            selectors = '#styleWireframe, #styleSolid, #stylePoints, #styleGlow, #styleRings, #styleGalaxy';
+            categoryPrefix = 'style';
+            break;
+          case 'effect':
+            selectors = '#effectNone, #effectPulse, #effectWave, #effectSpiral, #effectFirefly, #effectGlitter';
+            categoryPrefix = 'effect';
+            break;
+          case 'gradient':
+            selectors = '#gradientNone, #gradientVertical, #gradientRadial, #gradientRainbow, #gradientNeon, #gradientCyclic';
+            categoryPrefix = 'gradient';
+            break;
+          case 'animation':
+            selectors = '#animationNone, #animationExplosion, #animationPulsate, #animationVortex';
+            categoryPrefix = 'animation';
+            break;
+          default:
+            return;
+        }
+        
+        const buttons = document.querySelectorAll(selectors);
+        buttons.forEach(button => {
+          button.classList.remove('active');
+          
+          const buttonId = button.id.replace(new RegExp(`^${categoryPrefix}`), '').toLowerCase();
+          if (buttonId === activeId) {
+            button.classList.add('active');
+          }
+        });
+      }
+      
+      /**
+       * セクションのトグル機能
+       */
+      setupToggleSections() {
+        const sections = [
+          { header: 'presetHeader', content: 'presetContent' },
+          { header: 'interactionHeader', content: 'interactionContent' },
+          { header: 'animationHeader', content: 'animationContent' },
+          { header: 'basicHeader', content: 'basicContent' },
+          { header: 'particleHeader', content: 'particleContent' },
+          { header: 'sphereHeader', content: 'sphereContent' },
+          { header: 'effectHeader', content: 'effectContent' }
+        ];
+        
+        sections.forEach(section => {
+          const headerElem = document.getElementById(section.header);
+          const contentElem = document.getElementById(section.content);
+          
+          if (headerElem && contentElem) {
+            headerElem.addEventListener('click', () => {
+              contentElem.classList.toggle('hidden');
+              const arrow = headerElem.querySelector('span');
+              if (arrow) {
+                arrow.textContent = contentElem.classList.contains('hidden') ? '▶' : '▼';
+              }
+            });
+          }
+        });
+      }
+      
+      /**
+       * イベントリスナーのセットアップ
+       */
+      setupEventListeners() {
+        // ウィンドウリサイズ対応（デバウンス処理付き）
+        window.addEventListener('resize', () => {
+          clearTimeout(this.resizeTimer);
+          this.resizeTimer = setTimeout(this.onWindowResize.bind(this), 250);
+        });
+        
+        // ページを離れる際のクリーンアップ
+        window.addEventListener('beforeunload', this.cleanupResources.bind(this));
+        
+        // マウス移動のイベントリスナー
+        window.addEventListener('mousemove', (event) => {
+          this.mouse.x = event.clientX;
+          this.mouse.y = event.clientY;
+          this.mouse.active = true;
+        });
+        
+        // マウスがウィンドウから出た時の処理
+        window.addEventListener('mouseout', () => {
+          this.mouse.active = false;
+        });
+        
+        // タッチ操作のサポート
+        window.addEventListener('touchstart', (event) => {
+          if (event.touches.length > 0) {
+            this.mouse.x = event.touches[0].clientX;
+            this.mouse.y = event.touches[0].clientY;
+            this.mouse.active = true;
+          }
+        });
+        
+        window.addEventListener('touchmove', (event) => {
+          if (event.touches.length > 0) {
+            this.mouse.x = event.touches[0].clientX;
+            this.mouse.y = event.touches[0].clientY;
+          }
+        });
+        
+        window.addEventListener('touchend', () => {
+          // タッチが終わっても少し間はアクティブ状態を維持
+          setTimeout(() => {
+            this.mouse.active = false;
+          }, 500);
+        });
+      }
+      
+      /**
+       * ウィンドウリサイズ時の処理
+       */
+      onWindowResize() {
+        const container = document.getElementById('threeContainer');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        
+        // カメラのアスペクト比を更新
+        this.camera.aspect = width / height;
+        this.camera.updateProjectionMatrix();
+        
+        // レンダラーのサイズを更新
+        if (this.renderer) {
+          this.renderer.setSize(width, height);
+        }
+      }
+      
+      /**
+       * リソースをクリーンアップする関数
+       */
+      cleanupResources() {
+        // アニメーションフレームをキャンセル
+        if (this.animationFrameId) {
+          cancelAnimationFrame(this.animationFrameId);
+        }
+        
+        // リサイズタイマーをクリア
+        if (this.resizeTimer) {
+          clearTimeout(this.resizeTimer);
+        }
+        
+        // メモリのクリーンアップ
+        this.cleanupParticles();
+        
+        // キャッシュのクリーンアップ
+        for (const key in this.geometryCache) {
+          if (this.geometryCache[key]) {
+            this.geometryCache[key].dispose();
+          }
+        }
+        this.geometryCache = {};
+        
+        for (const key in this.materialCache) {
+          if (this.materialCache[key]) {
+            this.materialCache[key].dispose();
+          }
+        }
+        this.materialCache = {};
+        
+        // レンダラーの破棄
+        if (this.renderer) {
+          this.renderer.dispose();
+        }
+      }
+    }
+    
+    // アプリケーションの作成と初期化
+    try {
+      const app = new ParticleEffectApp();
+    } catch (e) {
+      console.error('初期化エラー:', e);
+      // エラーメッセージを表示
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.textContent = 'アプリケーションの初期化中にエラーが発生しました: ' + e.message;
+      document.body.appendChild(errorDiv);
+    }
+  </script>
+</body>
+</html>
