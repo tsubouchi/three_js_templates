@@ -37,6 +37,10 @@
   - `lightning_effect.html` - 稲妻のエフェクト
   - `decision_transition.html` - 意思決定を視覚化するトランジション効果
 
+- **物理シミュレーション**
+  - `electromagnetic_waves.html` - 電磁波の伝播シミュレーション
+  - `spacetime_deformation.html` - 時空の歪みを視覚化するシミュレーション
+
 - **その他のビジュアル**
   - `ball_move_line.html` - 線に沿って動く球体
   - `generative_art.html` - ジェネラティブアート
